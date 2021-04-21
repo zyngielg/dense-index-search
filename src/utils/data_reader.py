@@ -1,14 +1,11 @@
 import json
 import string
 from nltk import sent_tokenize, word_tokenize
-from nltk.stem.snowball import SnowballStemmer
 from tqdm import tqdm 
 
 questions_dev_medqa_path = '../data/medqa/questions/metamap_extracted_phrases/dev.jsonl'
 questions_train_medqa_path ='../data/medqa/questions/metamap_extracted_phrases/train.jsonl'
 questions_test_medqa_path ='../data/medqa/questions/metamap_extracted_phrases/train.jsonl'
-
-snowball_stemmer = SnowballStemmer(language='english')
 
 def read_questions_data():
     questions_data_dev = []
