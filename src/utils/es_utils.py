@@ -6,13 +6,19 @@ from nltk import FreqDist, ngrams, word_tokenize
 from numpy import mean
 
 
-class Indexes(Enum):
-    Unprocessed_sentences_shards_1 = "sentences-unprocessed-shards-1",
-    Stemmed_sentences_shards_1 = "sentences-stemmed-shards-1"
+def get_list_of_indexeses(es: Elasticsearch):
+    return list(es.indices.get_alias("*").keys())
 
 
-def search_documents(query_input, n, index_name):
-    es = Elasticsearch()
+def check_if_index_exists(es: Elasticsearch, index_name):
+    return es.indices.exists(index=index_name)
+
+
+def create_index(es: Elasticsearch, index_name, index_body):
+    es.indices.create(index=index_name, body=index_body)
+
+
+def search_documents(es: Elasticsearch, query_input, n, index_name):
     res = es.search(
         index=index_name,
         body={
@@ -63,7 +69,7 @@ def f(q_i, content):
 def bm_25(q_i, Q, documents, avg_doc_len, k_d, b_d):
     doc_len = sum([len(word_tokenize(x)) for x in documents])
     combined_documents = ' '.join(documents)
-    
+
     nominator = idf(q_i, documents) * f(q_i, combined_documents) * (k_d + 1)
     denominator = f(q_i, Q) + k_d + (1 - b_d + b_d * doc_len/avg_doc_len)
 
@@ -86,13 +92,14 @@ def ir_es_custom_score(documents, query, avg_query_len, avg_doc_len):
     # query_unigrams = [x[0] for x in list(ngrams(word_tokenize(query), 1))]
     query_unigrams = word_tokenize(query)
     query_len = len(query_unigrams)
-    
+
     combined_document = ' '.join(documents)
     combined_document_tokens = word_tokenize(combined_document)
-    
+
     score = 0
     for q_i in query_unigrams:
-        bm25 = bm_25(q_i=q_i, Q=query, documents=documents, avg_doc_len=avg_doc_len, k_d=k_d, b_d=b_d)
+        bm25 = bm_25(q_i=q_i, Q=query, documents=documents,
+                     avg_doc_len=avg_doc_len, k_d=k_d, b_d=b_d)
         idf_q_i = idf(q_i=q_i, documents=documents)
         f_q_i_Q = f(q_i=q_i, content=query)
 
