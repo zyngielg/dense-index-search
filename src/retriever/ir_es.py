@@ -1,12 +1,14 @@
 from retriever.retriever import Retriever
 from elasticsearch import Elasticsearch
 from tqdm import tqdm
+from utils.es_utils import Indexes
 import utils.es_utils as es_utils
 import numpy as np
 
 
 class IR_ES(Retriever):
-    index_name = "medqa-unprocessed-chunks"
+    index_name = Indexes.MedQA_chunks_50.value
+    stemmed = True
     num_of_documents_to_retrieve = 20
     host = ['http://localhost']
     port = '9200'
@@ -38,7 +40,8 @@ class IR_ES(Retriever):
         retrieved_documents = es_utils.search_documents(es=self.es,
                                                         query_input=query,
                                                         n=self.num_of_documents_to_retrieve,
-                                                        index_name=self.index_name)
+                                                        index_name=self.index_name,
+                                                        stemmed=self.stemmed)
         return retrieved_documents, [x['evidence']['content'] for x in retrieved_documents]
 
     def calculate_score(self, retrieved_documents):

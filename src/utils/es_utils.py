@@ -6,6 +6,11 @@ from nltk import FreqDist, ngrams, word_tokenize
 from numpy import mean
 
 
+class Indexes(Enum):
+    MedQA_chunks_100 = "medqa-chunks-100"
+    MedQA_chunks_50 = "medqa-chunks-50"
+
+
 def get_list_of_indexeses(es: Elasticsearch):
     return list(es.indices.get_alias("*").keys())
 
@@ -18,18 +23,21 @@ def create_index(es: Elasticsearch, index_name, index_body):
     es.indices.create(index=index_name, body=index_body)
 
 
-def search_documents(es: Elasticsearch, query_input, n, index_name):
+def search_documents(es: Elasticsearch, query_input, n, index_name, stemmed=False):
+    match_option = "content" if stemmed is False else "content_stemmed"
+    body = {
+        "query": {
+            "match": {
+                match_option: query_input
+            }
+        },
+        "from": 0,
+        "size": n
+    }    
+
     res = es.search(
         index=index_name,
-        body={
-            "query": {
-                "match": {
-                    "content": query_input
-                }
-            },
-            "from": 0,
-            "size": n
-        }
+        body=body
     )
 
     number_of_hits = len(res['hits']['hits'])
@@ -74,13 +82,6 @@ def bm_25(q_i, Q, documents, avg_doc_len, k_d, b_d):
     denominator = f(q_i, Q) + k_d + (1 - b_d + b_d * doc_len/avg_doc_len)
 
     return nominator/denominator
-
-
-def ir_es_score(top_documents):
-    score = 0
-    for doc in top_documents:
-        score += doc['score']
-    return score
 
 
 def ir_es_custom_score(documents, query, avg_query_len, avg_doc_len):
