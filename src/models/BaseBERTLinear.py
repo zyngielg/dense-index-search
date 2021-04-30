@@ -2,9 +2,9 @@ import torch
 from transformers import AutoModel
 
 
-class CustomBERT(torch.nn.Module):
+class BaseBERTLinear(torch.nn.Module):
     def __init__(self):
-        super(CustomBERT, self).__init__()
+        super(BaseBERTLinear, self).__init__()
         self.bert = AutoModel.from_pretrained('bert-base-cased')
         self.linear = torch.nn.Linear(self.bert.pooler.dense.out_features, 1)
         self.softmax = torch.nn.Softmax(dim=1)
