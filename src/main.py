@@ -28,7 +28,7 @@ def choose_retriever_and_reader(retriever_choice: str, reader_choice: str):
         retriever = None
 
     if reader_choice == 'Base-BERT':
-        reader = Base_BERT_Reader()
+        reader = Base_BERT_Reader(load_weights=True)
     else:
         reader = None
 

@@ -3,7 +3,7 @@ from transformers import AutoModel
 
 
 class BaseBERTLinear(torch.nn.Module):
-    def __init__(self):
+    def __init__(self, load_weights=False):
         super(BaseBERTLinear, self).__init__()
         self.bert = AutoModel.from_pretrained('bert-base-cased')
         self.linear = torch.nn.Linear(self.bert.pooler.dense.out_features, 1)

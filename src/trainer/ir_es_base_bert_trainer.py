@@ -223,3 +223,10 @@ class IrEsBaseBertTrainer():
 
         print("Total training took {:} (h:mm:ss)".format(
             self.format_time(time.time()-total_t0)))
+        
+        now = datetime.datetime.now()
+        # dd/mm/YY H:M:S
+        dt_string = now.strftime("%Y-%m-%d_%H:%M:%S")
+        model_name = f"src/trainer/results/{dt_string}__reader:IRES__retriever:BERT_linear.pth"
+        torch.save(self.reader.model.state_dict(), model_name)
+        print(f"Model weights saved in {model_name}")
