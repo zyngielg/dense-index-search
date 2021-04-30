@@ -24,11 +24,13 @@ def parse_arguments():
 def choose_retriever_and_reader(retriever_choice: str, reader_choice: str):
     if retriever_choice == 'IR-ES':
         retriever = IR_ES()
+        print("Chosen retriever: IR-ES")
     else:
         retriever = None
 
     if reader_choice == 'Base-BERT':
-        reader = Base_BERT_Reader(load_weights=True)
+        reader = Base_BERT_Reader(load_weights=False)
+        print("Chosen reader: Base-BERT")
     else:
         reader = None
 
@@ -39,18 +41,12 @@ def choose_retriever_and_reader(retriever_choice: str, reader_choice: str):
     return retriever, reader
 
 
-def train(questions: MedQAQuestions, retriever: Retriever, reader: Reader):
-    questions_train = questions.questions_train
-    questions_dev = questions.questions_dev
-    print('training')
-
-
 def qa(questions, retriever: Retriever, reader: Reader):
     if type(retriever) == IR_ES:
         retriever.__class__ = IR_ES
         if reader == None:
-            print('Running IR-ES module e2e')
-            retriever.run_ir_es_e2e(medqa_questions.questions_dev)
+            print('Running IR-ES module e2e (val set)')
+            retriever.run_ir_es_e2e(questions.questions_val)
         elif type(reader) == Base_BERT_Reader:
             print('nice')
 

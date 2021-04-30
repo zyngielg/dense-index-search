@@ -17,7 +17,7 @@ class IrEsBaseBertTrainer():
         self.retriever = retriever
         self.reader = reader
         self.questions_train = questions.questions_train
-        self.questions_dev = questions.questions_dev
+        self.questions_val = questions.questions_val
         self.num_epochs = 2
         self.batch_size = 32
         self.lr = 5e-5
@@ -39,19 +39,25 @@ class IrEsBaseBertTrainer():
         return np.sum(predictions == correct_answers) / len(correct_answers)
 
     def pepare_data_loader(self):
+        print("******** Creating train dataloader ********")
         train_input_queries, train_input_answers, train_input_answers_idx = self.retriever.create_tokenized_input(
             questions=self.questions_train, tokenizer=self.reader.tokenizer)
+        
         train_dataloader = create_data_loader(input_queries=train_input_queries, input_answers=train_input_answers,
                                               input_answers_idx=train_input_answers_idx, batch_size=self.batch_size)
+        print("******** Train dataloader created  ********")
+        
+        print("******** Creating val dataloader ********")
 
         val_input_queries, val_input_answers, val_input_answers_idx = self.retriever.create_tokenized_input(
-            questions=self.questions_train, tokenizer=self.reader.tokenizer)
+            questions=self.questions_val, tokenizer=self.reader.tokenizer)
         val_dataloader = create_data_loader(input_queries=val_input_queries, input_answers=val_input_answers,
                                             input_answers_idx=val_input_answers_idx, batch_size=self.batch_size)
-
+        print("******** Val dataloader created  ********")
         return train_dataloader, val_dataloader
 
     def train(self):
+        print("***** Running training *****")
         device = self.reader.device
         seed_val = 42
         random.seed(seed_val)
@@ -225,8 +231,9 @@ class IrEsBaseBertTrainer():
             self.format_time(time.time()-total_t0)))
         
         now = datetime.datetime.now()
-        # dd/mm/YY H:M:S
         dt_string = now.strftime("%Y-%m-%d_%H:%M:%S")
         model_name = f"src/trainer/results/{dt_string}__reader:IRES__retriever:BERT_linear.pth"
         torch.save(self.reader.model.state_dict(), model_name)
         print(f"Model weights saved in {model_name}")
+        print("***** Training completed *****")
+

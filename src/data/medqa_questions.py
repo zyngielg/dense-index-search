@@ -6,7 +6,7 @@ from tqdm import tqdm
 
 class MedQAQuestions:
     questions_train_path = "data/medqa/questions/4_options/train.jsonl"
-    questions_dev_path = "data/medqa/questions/4_options/dev.jsonl"
+    questions_val_path = "data/medqa/questions/4_options/dev.jsonl"
     questions_test_path = "data/medqa/questions/4_options/test.jsonl"
     stemmer = SnowballStemmer(language='english')
 
@@ -14,8 +14,8 @@ class MedQAQuestions:
         self.stemming = stemming
         self.questions_train = self.load_questions(
             questions_path=self.questions_train_path)
-        self.questions_dev = self.load_questions(
-            questions_path=self.questions_dev_path)
+        self.questions_val = self.load_questions(
+            questions_path=self.questions_val_path)
         self.questions_test = self.load_questions(
             questions_path=self.questions_test_path)
 
