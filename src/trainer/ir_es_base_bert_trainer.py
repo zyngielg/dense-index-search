@@ -103,16 +103,14 @@ class IrEsBaseBertTrainer():
                 answers_indexes = batch[2]
                 queries_outputs = []
                 for question_queries in questions_queries_collection:
-                    input_ids = question_queries["input_ids"].to(device)
-                    input_token_type_ids = question_queries["token_type_ids"].to(
-                        device)
-                    input_attention_mask = question_queries["attention_mask"].to(
-                        device)
+                    input_ids = question_queries["input_ids"]
+                    input_token_type_ids = question_queries["token_type_ids"]
+                    input_attention_mask = question_queries["attention_mask"]
 
                     # the forward pass, since this is only needed for backprop (training).
                     # Tell pytorch not to bother with constructing the compute graph during
                     output = self.reader.model(
-                        input_ids=input_ids, attention_mask=input_attention_mask, token_type_ids=input_token_type_ids)
+                        input_ids=input_ids.to(device), attention_mask=input_attention_mask.to(device), token_type_ids=input_token_type_ids.to(device))
                     queries_outputs.append(output)
                 # each row represents values for the same question, each column represents an output for an answer option
                 queries_outputs = torch.stack(queries_outputs).reshape(
@@ -172,16 +170,14 @@ class IrEsBaseBertTrainer():
 
                 queries_outputs = []
                 for question_queries in questions_queries_collection:
-                    input_ids = question_queries["input_ids"].to(device)
-                    input_token_type_ids = question_queries["token_type_ids"].to(
-                        device)
-                    input_attention_mask = question_queries["attention_mask"].to(
-                        device)
+                    input_ids = question_queries["input_ids"]
+                    input_token_type_ids = question_queries["token_type_ids"]
+                    input_attention_mask = question_queries["attention_mask"]
 
                     # Tell pytorch not to bother with constructing the compute graph during
                     # the forward pass, since this is only needed for backprop (training).
                     output = self.reader.model(
-                        input_ids=input_ids, attention_mask=input_attention_mask, token_type_ids=input_token_type_ids)
+                        input_ids=input_ids.to(device), attention_mask=input_attention_mask.to(device), token_type_ids=input_token_type_ids.to(device))
                     queries_outputs.append(output)
 
                 queries_outputs = torch.stack(queries_outputs).reshape(
