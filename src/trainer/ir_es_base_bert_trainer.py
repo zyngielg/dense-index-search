@@ -91,7 +91,7 @@ class IrEsBaseBertTrainer():
             total_train_loss = 0
             self.reader.model.train()
             for step, batch in enumerate(train_dataloader):
-                if step % 10 == 0 and not step == 0:
+                if step % 50 == 0 and not step == 0:
                     elapsed = self.format_time(time.time() - t0)
                     print(
                         f'Batch {step} of {len(train_dataloader)}. Elapsed: {elapsed}')
