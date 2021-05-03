@@ -41,7 +41,7 @@ class IrEsBaseBertTrainer():
     def pepare_data_loader(self):
         print("******** Creating train dataloader ********")
         train_input_queries, train_input_answers, train_input_answers_idx = self.retriever.create_tokenized_input(
-            questions=self.questions_train, tokenizer=self.reader.tokenizer)
+            questions=self.questions_train, tokenizer=self.reader.tokenizer, train_set=True)
         
         train_dataloader = create_data_loader(input_queries=train_input_queries, input_answers=train_input_answers,
                                               input_answers_idx=train_input_answers_idx, batch_size=self.batch_size)
@@ -50,7 +50,7 @@ class IrEsBaseBertTrainer():
         print("******** Creating val dataloader ********")
 
         val_input_queries, val_input_answers, val_input_answers_idx = self.retriever.create_tokenized_input(
-            questions=self.questions_val, tokenizer=self.reader.tokenizer)
+            questions=self.questions_val, tokenizer=self.reader.tokenizer, train_set=False)
         val_dataloader = create_data_loader(input_queries=val_input_queries, input_answers=val_input_answers,
                                             input_answers_idx=val_input_answers_idx, batch_size=self.batch_size)
         print("******** Val dataloader created  ********")

@@ -52,7 +52,7 @@ class IR_ES(Retriever):
                                   index_name=self.index_name,
                                   index_body=create_index_body)
 
-    def create_tokenized_input(self, questions, tokenizer):
+    def create_tokenized_input(self, questions, tokenizer, train_set):
         def letter_answer_to_index(answer):
             return ord(answer) - 65
 
@@ -69,7 +69,7 @@ class IR_ES(Retriever):
                 qa_inference = f"{question} {option}"
                 
                 _, retrieved_documents = self.retrieve_documents(
-                    query=qa_retrieval, question_id=question_id, option=option.strip().lower(), train=True)
+                    query=qa_retrieval, question_id=question_id, option=option.strip().lower(), train=train_set)
 
                 context = ' '.join(retrieved_documents)
                 query = tokenizer(context, qa_inference, add_special_tokens=True,
