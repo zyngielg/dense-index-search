@@ -31,7 +31,8 @@ class Base_BERT_Reader(Reader):
         return super().create_context()
     
     def freeze_layers(self):
-        layers_to_not_freeze = ['10', '11', 'linear', 'pooler'] # freezing first 9 layers
+        layers_to_not_freeze = [#'10', #'11', 
+                                'linear', 'pooler'] # freezing first 9 layers
 
         for name, param in self.model.named_parameters():
             if not any(x in name for x in layers_to_not_freeze):

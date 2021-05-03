@@ -19,7 +19,7 @@ class IrEsBaseBertTrainer():
         self.questions_train = questions.questions_train
         self.questions_val = questions.questions_val
         self.num_epochs = 3
-        self.batch_size = 32
+        self.batch_size = 16
         self.lr = 5e-5
         self.num_answers = len(
             list(self.questions_train.values())[0]['options'])
@@ -133,6 +133,10 @@ class IrEsBaseBertTrainer():
 
                 # Update the learning rate.
                 scheduler.step()
+                del queries_outputs
+                del output
+                del loss
+                torch.cuda.empty_cache()
 
             # Calculate the average loss over all of the batches.
             avg_train_loss = total_train_loss / len(train_dataloader)
@@ -162,8 +166,6 @@ class IrEsBaseBertTrainer():
 
             # Evaluate data for one epoch
             for step, batch in enumerate(val_dataloader):
-                if step > 10:
-                    continue
                 questions_queries_collection = batch[0]
                 answers = batch[1]
                 answers_indexes = batch[2]
@@ -197,6 +199,10 @@ class IrEsBaseBertTrainer():
                     answers_indexes = answers_indexes.to('cpu').numpy()
                 total_eval_accuracy += self.calculate_accuracy(
                     output, answers_indexes)
+                
+                del queries_outputs
+                del output
+                torch.cuda.empty_cache()
 
             # Report the final accuracy for this validation run.
             avg_val_accuracy = total_eval_accuracy / len(val_dataloader)
