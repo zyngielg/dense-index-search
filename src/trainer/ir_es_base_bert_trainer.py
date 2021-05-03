@@ -21,6 +21,7 @@ class IrEsBaseBertTrainer():
         self.num_epochs = 3
         self.batch_size = 32
         self.lr = 5e-5
+        self.num_answers = 4
 
     @staticmethod
     def format_time(elapsed):
@@ -182,7 +183,7 @@ class IrEsBaseBertTrainer():
                     queries_outputs.append(output)
 
                 queries_outputs = torch.stack(queries_outputs).reshape(
-                    [5, len(answers)]).transpose(0, 1)
+                    [self.num_answers, len(answers)]).transpose(0, 1)
                 output = self.reader.model.softmax(queries_outputs)
                 loss = criterion(output, answers_indexes.to(device))
 
