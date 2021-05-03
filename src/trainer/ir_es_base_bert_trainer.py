@@ -18,7 +18,7 @@ class IrEsBaseBertTrainer():
         self.reader = reader
         self.questions_train = questions.questions_train
         self.questions_val = questions.questions_val
-        self.num_epochs = 2
+        self.num_epochs = 3
         self.batch_size = 32
         self.lr = 5e-5
 
