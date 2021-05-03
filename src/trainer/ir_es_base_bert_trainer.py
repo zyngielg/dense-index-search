@@ -21,7 +21,8 @@ class IrEsBaseBertTrainer():
         self.num_epochs = 3
         self.batch_size = 32
         self.lr = 5e-5
-        self.num_answers = 4
+        self.num_answers = len(
+            list(self.questions_train.values())[0]['options'])
 
     @staticmethod
     def format_time(elapsed):
@@ -43,11 +44,11 @@ class IrEsBaseBertTrainer():
         print("******** Creating train dataloader ********")
         train_input_queries, train_input_answers, train_input_answers_idx = self.retriever.create_tokenized_input(
             questions=self.questions_train, tokenizer=self.reader.tokenizer, train_set=True)
-        
+
         train_dataloader = create_data_loader(input_queries=train_input_queries, input_answers=train_input_answers,
                                               input_answers_idx=train_input_answers_idx, batch_size=self.batch_size)
         print("******** Train dataloader created  ********")
-        
+
         print("******** Creating val dataloader ********")
 
         val_input_queries, val_input_answers, val_input_answers_idx = self.retriever.create_tokenized_input(
@@ -55,6 +56,7 @@ class IrEsBaseBertTrainer():
         val_dataloader = create_data_loader(input_queries=val_input_queries, input_answers=val_input_answers,
                                             input_answers_idx=val_input_answers_idx, batch_size=self.batch_size)
         print("******** Val dataloader created  ********")
+
         return train_dataloader, val_dataloader
 
     def train(self):
@@ -114,7 +116,7 @@ class IrEsBaseBertTrainer():
                     queries_outputs.append(output)
                 # each row represents values for the same question, each column represents an output for an answer option
                 queries_outputs = torch.stack(queries_outputs).reshape(
-                    [5, len(answers)]).transpose(0, 1)
+                    [self.num_answers, len(answers)]).transpose(0, 1)
                 # choosing the indexes of the answers with the highest post-softmax value
                 output = self.reader.model.softmax(queries_outputs)
 
@@ -230,11 +232,10 @@ class IrEsBaseBertTrainer():
 
         print("Total training took {:} (h:mm:ss)".format(
             self.format_time(time.time()-total_t0)))
-        
+
         now = datetime.datetime.now()
         dt_string = now.strftime("%Y-%m-%d_%H:%M:%S")
         model_name = f"src/trainer/results/{dt_string}__reader:IRES__retriever:BERT_linear.pth"
         torch.save(self.reader.model.state_dict(), model_name)
         print(f"Model weights saved in {model_name}")
         print("***** Training completed *****")
-

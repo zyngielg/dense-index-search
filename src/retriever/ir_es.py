@@ -79,11 +79,11 @@ class IR_ES(Retriever):
                 query_token_type_ids = query["token_type_ids"].flatten()
                 query_attention_mask = query["attention_mask"].flatten()
 
-            queries.append({
-                "input_ids": query_input_ids,
-                "token_type_ids": query_token_type_ids,
-                "attention_mask": query_attention_mask
-            })
+                queries.append({
+                    "input_ids": query_input_ids,
+                    "token_type_ids": query_token_type_ids,
+                    "attention_mask": query_attention_mask
+                })
             input_queries.append(queries)
             input_answers.append(question_data["answer"])
 
