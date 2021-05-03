@@ -1,63 +1,40 @@
 import torch
 from reader.reader import Reader
-from models.CustomBERT import CustomBERT
+from retriever.retriever import Retriever
+from models.BaseBERTLinear import BaseBERTLinear
 from transformers import AutoTokenizer
 
+
 class Base_BERT_Reader(Reader):
-    def __init__(self):
-        device = torch.device('cuda') if torch.cuda.is_available() else torch.device('cpu')
-        print("Using {} device".format(device))
-        
-        self.model = CustomBERT().to(device)
+    # change if necessary
+    weights_file_directory = "src/trainer/results"
+    weights_file_name = "2021-04-30_16:08:19 reader IRES retriever BERT_linear.pth"
+    weights_file_path = f"{weights_file_directory}/{weights_file_name}"
+
+    def __init__(self, load_weights=False):
+        self.device = torch.device(
+            'cuda') if torch.cuda.is_available() else torch.device('cpu')
+        print("Using {} device".format(self.device))
+
+        self.model = BaseBERTLinear()
+        if load_weights:
+            self.model.load_state_dict(torch.load(self.weights_file_path))
+        self.freeze_layers()
+        self.model.to(self.device)
         self.tokenizer = AutoTokenizer.from_pretrained("bert-base-cased")
         
-        
+
     def choose_answer(self, query, context, question_data):
-        return "Nice"
+        raise NotImplementedError
 
     def create_context(self):
         return super().create_context()
     
-    # def create_tokenized_input(question_data, documents_collection_dict: dict):
-    #     input_queries = []
-    #     input_answers = []
-    #     input_answers_idx = []
+    def freeze_layers(self):
+        layers_to_not_freeze = ['10', '11', 'linear', 'pooler'] # freezing first 9 layers
 
-    #     for question_id, question_data in tqdm(questions_dict.items()):
-    #         question = question_data['question']
-    #         metamap_phrases = question_data['metamap_phrases']
-    #         queries = []
-    #         for option in question_data['options'].values():
-    #         qa = ' '.join(metamap_phrases) + ' ' + option
-    #         retrieved_documents = get_context(question_id=question_id,
-    #                                           option=option,
-    #                                           documents_collection=documents_collection_dict)
-    #         context = ' '.join(retrieved_documents)
-    #         query = tokenizer(context, qa,
-    #                           add_special_tokens=True,
-    #                           max_length=512,
-    #                           padding='max_length',
-    #                           truncation=True,
-    #                           return_tensors="pt"
-    #                           )
-    #         query_input_ids = query["input_ids"].flatten()
-    #         query_token_type_ids = query["token_type_ids"].flatten()
-    #         query_attention_mask = query["attention_mask"].flatten()
-
-    #         queries.append({
-    #             "input_ids": query_input_ids,
-    #             "token_type_ids": query_token_type_ids,
-    #             "attention_mask": query_attention_mask
-    #         })
-    #         # break
-    #         # dev_dataset_input.append({
-    #         #       "correct_answer": question_data["answer"],
-    #         #       "correct_answer_idx": letter_answer_to_index(question_data['answer_idx']),
-    #         #       "queries": queries
-    #         #   })
-    #         input_queries.append(queries)
-    #         input_answers.append(question_data["answer"])
-
-    #         input_answers_idx.append(
-    #             letter_answer_to_index(question_data['answer_idx']))
-    #     return input_queries, input_answers, input_answers_idx
+        for name, param in self.model.named_parameters():
+            if not any(x in name for x in layers_to_not_freeze):
+                param.requires_grad = False
+            else:
+                print(f"Layer {name} not frozen")
