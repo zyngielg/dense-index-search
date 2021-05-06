@@ -1,4 +1,5 @@
 from reader.base_bert_reader import Base_BERT_Reader
+from reader.reader import Reader
 from retriever.ir_es import IR_ES
 from data.medqa_questions import MedQAQuestions
 from transformers import get_linear_schedule_with_warmup
@@ -10,19 +11,26 @@ import torch
 import time
 import datetime
 from data.data_loader import create_data_loader
+from retriever.retriever import Retriever
+from trainer.trainer import Trainer
+
+# TODO: currently after 3 epochs the loss and the accuracy remain the same
+# check whether the input to BERT should be reformatted compared to the current one
 
 
-class IrEsBaseBertTrainer():
-    def __init__(self, questions: MedQAQuestions, retriever: IR_ES, reader: Base_BERT_Reader):
-        self.retriever = retriever
-        self.reader = reader
-        self.questions_train = questions.questions_train
-        self.questions_val = questions.questions_val
-        self.num_epochs = 3
-        self.batch_size = 16
-        self.lr = 5e-5
-        self.num_answers = len(
-            list(self.questions_train.values())[0]['options'])
+class IrEsBaseBertTrainer(Trainer):
+    # def __init__(self, questions: MedQAQuestions, retriever: IR_ES, reader: Base_BERT_Reader):
+    #     self.retriever = retriever
+    #     self.reader = reader
+    #     self.questions_train = questions.questions_train
+    #     self.questions_val = questions.questions_val
+    #     self.num_epochs = 3
+    #     self.batch_size = 16
+    #     self.lr = 5e-5
+    #     self.num_answers = len(
+    #         list(self.questions_train.values())[0]['options'])
+    def __init__(self, questions: MedQAQuestions, retriever: Retriever, reader: Reader, num_epochs: int, batch_size: int, lr: float) -> None:
+        super().__init__(questions, retriever, reader, num_epochs, batch_size, lr)
 
     @staticmethod
     def format_time(elapsed):
@@ -119,7 +127,7 @@ class IrEsBaseBertTrainer():
                 output = self.reader.model.softmax(queries_outputs)
 
                 loss = criterion(output, answers_indexes.to(device))
-                total_train_loss += loss
+                total_train_loss += loss.item()
                 loss.backward()
                 # Clip the norm of the gradients to 1.0.
                 # This is to help prevent the "exploding gradients" problem.
@@ -133,10 +141,6 @@ class IrEsBaseBertTrainer():
 
                 # Update the learning rate.
                 scheduler.step()
-                del queries_outputs
-                del output
-                del loss
-                torch.cuda.empty_cache()
 
             # Calculate the average loss over all of the batches.
             avg_train_loss = total_train_loss / len(train_dataloader)
@@ -162,7 +166,6 @@ class IrEsBaseBertTrainer():
             # Tracking variables
             total_eval_accuracy = 0
             total_eval_loss = 0
-            nb_eval_steps = 0
 
             # Evaluate data for one epoch
             for step, batch in enumerate(val_dataloader):
@@ -178,8 +181,9 @@ class IrEsBaseBertTrainer():
 
                     # Tell pytorch not to bother with constructing the compute graph during
                     # the forward pass, since this is only needed for backprop (training).
-                    output = self.reader.model(
-                        input_ids=input_ids.to(device), attention_mask=input_attention_mask.to(device), token_type_ids=input_token_type_ids.to(device))
+                    with torch.no_grad():
+                        output = self.reader.model(
+                            input_ids=input_ids.to(device), attention_mask=input_attention_mask.to(device), token_type_ids=input_token_type_ids.to(device))
                     queries_outputs.append(output)
 
                 queries_outputs = torch.stack(queries_outputs).reshape(
@@ -199,10 +203,6 @@ class IrEsBaseBertTrainer():
                     answers_indexes = answers_indexes.to('cpu').numpy()
                 total_eval_accuracy += self.calculate_accuracy(
                     output, answers_indexes)
-                
-                del queries_outputs
-                del output
-                torch.cuda.empty_cache()
 
             # Report the final accuracy for this validation run.
             avg_val_accuracy = total_eval_accuracy / len(val_dataloader)
