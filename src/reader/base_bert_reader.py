@@ -19,20 +19,22 @@ class Base_BERT_Reader(Reader):
         self.model = BaseBERTLinear()
         if load_weights:
             self.model.load_state_dict(torch.load(self.weights_file_path))
+        if torch.cuda.device_count() > 1:
+            print(f"Using {torch.cuda.device_count()} GPUs")
+            self.model = torch.nn.DataParallel(self.model)
         self.freeze_layers()
         self.model.to(self.device)
         self.tokenizer = AutoTokenizer.from_pretrained("bert-base-cased")
-        
+        self.softmax = torch.nn.Softmax(dim=1)
 
     def choose_answer(self, query, context, question_data):
         raise NotImplementedError
 
     def create_context(self):
         return super().create_context()
-    
+
     def freeze_layers(self):
-        layers_to_not_freeze = [#'10', #'11', 
-                                'linear', 'pooler'] # freezing first 9 layers
+        layers_to_not_freeze = ['10', '11', 'linear', 'pooler']  
 
         for name, param in self.model.named_parameters():
             if not any(x in name for x in layers_to_not_freeze):

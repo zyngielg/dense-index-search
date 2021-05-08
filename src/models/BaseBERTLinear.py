@@ -7,7 +7,8 @@ class BaseBERTLinear(torch.nn.Module):
         super(BaseBERTLinear, self).__init__()
         self.bert = AutoModel.from_pretrained('bert-base-cased')
         self.linear = torch.nn.Linear(self.bert.pooler.dense.out_features, 1)
-        self.softmax = torch.nn.Softmax(dim=1)
+        self.dropout = torch.nn.Dropout(p=0.15)
+        # self.softmax = torch.nn.Softmax(dim=1)
 
     def forward(self, input_ids, attention_mask, token_type_ids):
         bert_output = self.bert(input_ids=input_ids,

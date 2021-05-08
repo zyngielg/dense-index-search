@@ -19,34 +19,8 @@ from trainer.trainer import Trainer
 
 
 class IrEsBaseBertTrainer(Trainer):
-    # def __init__(self, questions: MedQAQuestions, retriever: IR_ES, reader: Base_BERT_Reader):
-    #     self.retriever = retriever
-    #     self.reader = reader
-    #     self.questions_train = questions.questions_train
-    #     self.questions_val = questions.questions_val
-    #     self.num_epochs = 3
-    #     self.batch_size = 16
-    #     self.lr = 5e-5
-    #     self.num_answers = len(
-    #         list(self.questions_train.values())[0]['options'])
     def __init__(self, questions: MedQAQuestions, retriever: Retriever, reader: Reader, num_epochs: int, batch_size: int, lr: float) -> None:
         super().__init__(questions, retriever, reader, num_epochs, batch_size, lr)
-
-    @staticmethod
-    def format_time(elapsed):
-        '''
-        Takes a time in seconds and returns a string hh:mm:ss
-        '''
-        # Round to the nearest second.
-        elapsed_rounded = int(round((elapsed)))
-
-        # Format as hh:mm:ss
-        return str(datetime.timedelta(seconds=elapsed_rounded))
-
-    @staticmethod
-    def calculate_accuracy(predictions_distribution, correct_answers):
-        predictions = np.argmax(predictions_distribution, axis=1)
-        return np.sum(predictions == correct_answers) / len(correct_answers)
 
     def pepare_data_loader(self):
         print("******** Creating train dataloader ********")
@@ -68,7 +42,7 @@ class IrEsBaseBertTrainer(Trainer):
         return train_dataloader, val_dataloader
 
     def train(self):
-        print("***** Running training *****")
+        super().train()
         device = self.reader.device
         seed_val = 42
         random.seed(seed_val)
@@ -78,9 +52,6 @@ class IrEsBaseBertTrainer(Trainer):
         total_t0 = time.time()
 
         training_stats = []
-
-        #  We fine-tune for 3 epochs with a learning rate of 5e-5 and a batch size of 32
-        lr = 5e-5
 
         criterion = torch.nn.CrossEntropyLoss()
         optimizer = torch.optim.AdamW(
@@ -99,7 +70,7 @@ class IrEsBaseBertTrainer(Trainer):
             total_train_loss = 0
             self.reader.model.train()
             for step, batch in enumerate(train_dataloader):
-                if step % 50 == 0 and not step == 0:
+                if step % 25 == 0 and not step == 0:
                     elapsed = self.format_time(time.time() - t0)
                     print(
                         f'Batch {step} of {len(train_dataloader)}. Elapsed: {elapsed}')
@@ -124,7 +95,7 @@ class IrEsBaseBertTrainer(Trainer):
                 queries_outputs = torch.stack(queries_outputs).reshape(
                     [self.num_answers, len(answers)]).transpose(0, 1)
                 # choosing the indexes of the answers with the highest post-softmax value
-                output = self.reader.model.softmax(queries_outputs)
+                output = self.reader.softmax(queries_outputs)
 
                 loss = criterion(output, answers_indexes.to(device))
                 total_train_loss += loss.item()
@@ -188,7 +159,7 @@ class IrEsBaseBertTrainer(Trainer):
 
                 queries_outputs = torch.stack(queries_outputs).reshape(
                     [self.num_answers, len(answers)]).transpose(0, 1)
-                output = self.reader.model.softmax(queries_outputs)
+                output = self.reader.softmax(queries_outputs)
                 loss = criterion(output, answers_indexes.to(device))
 
                 # Accumulate the validation loss.

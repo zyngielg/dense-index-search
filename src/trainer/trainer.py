@@ -3,6 +3,7 @@ import datetime
 from abc import ABC, abstractclassmethod
 from data.medqa_questions import MedQAQuestions
 from reader.reader import Reader
+from numpy import sum, argmax
 from retriever.retriever import Retriever
 
 
@@ -34,3 +35,8 @@ class Trainer(ABC):
 
         # Format as hh:mm:ss
         return str(datetime.timedelta(seconds=elapsed_rounded))
+
+    @staticmethod
+    def calculate_accuracy(predictions_distribution, correct_answers):
+        predictions = argmax(predictions_distribution, axis=1)
+        return sum(predictions == correct_answers) / len(correct_answers)
