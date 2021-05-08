@@ -1,4 +1,5 @@
 import argparse
+from data.medqa_corpus import MedQACorpus
 from modules_factories import ReaderRetrieverFactory, TrainerFactory
 from retriever.retriever import Retriever
 from retriever.ir_es import IR_ES
@@ -38,10 +39,12 @@ def qa(questions, retriever: Retriever, reader: Reader):
 if __name__ == "__main__":
     args = parse_arguments()
     medqa_questions = MedQAQuestions(stemming=False)
+    medqa_corpus = MedQACorpus(stemming=False)
 
     retriever_reader_factory = ReaderRetrieverFactory(
         retriever_choice=args.retriever, reader_choice=args.reader)
     retriever = retriever_reader_factory.create_retriever()
+    retriever.prepare_retriever(medqa_corpus)
     reader = retriever_reader_factory.create_reader()
 
     if args.mode == "QA":

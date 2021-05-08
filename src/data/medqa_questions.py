@@ -1,7 +1,6 @@
 import json
 
 from nltk.stem.snowball import SnowballStemmer
-from tqdm import tqdm
 
 
 class MedQAQuestions:

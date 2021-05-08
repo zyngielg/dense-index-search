@@ -22,19 +22,20 @@ class IR_ES(Retriever):
     def __init__(self, from_es_session=False):
         self.from_es_session = from_es_session
 
+    def prepare_retriever(self, corpus=None):
         if self.from_es_session is True:
             self.es = Elasticsearch(hosts=self.host, port=self.port)
             if not self.es.ping():
                 raise ValueError(
                     "Connection failed. Make sure that elasticsearch instance is running")
-            self.setup_elasticsearch()
+            self.__setup_elasticsearch()
         else:
             self.train_retrieved_documents = pickle_utils.load_pickle(
                 self.retrieved_documents_train_path)
             self.val_retrieved_documents = pickle_utils.load_pickle(
                 self.retrieved_documents_val_path)
 
-    def setup_elasticsearch(self):
+    def __setup_elasticsearch(self):
         if not es_utils.check_if_index_exists(es=self.es,
                                               index_name=self.index_name):
             create_index_body = """{
@@ -67,7 +68,7 @@ class IR_ES(Retriever):
             for option in question_data['options'].values():
                 qa_retrieval = ' '.join(metamap_phrases) + ' ' + option
                 qa_inference = f"{question} {option}"
-                
+
                 _, retrieved_documents = self.retrieve_documents(
                     query=qa_retrieval, question_id=question_id, option=option.strip().lower(), train=train_set)
 
@@ -112,7 +113,7 @@ class IR_ES(Retriever):
             x['evidence']['content'] for x in retrieved_documents]
         return retrieved_documents, retrieved_documents_content
 
-    def calculate_score(self, retrieved_documents):
+    def __calculate_score(self, retrieved_documents):
         return np.sum([doc['score'] for doc in retrieved_documents])
 
     def run_ir_es_e2e(self, questions):
@@ -131,7 +132,7 @@ class IR_ES(Retriever):
                 query = question + " " + option_answer
                 top_documents, _ = self.retrieve_documents(query)
                 if top_documents != []:
-                    score = self.calculate_score(top_documents)
+                    score = self.__calculate_score(top_documents)
                     if final_score < score:
                         final_answer = option_answer
                         final_score = score
