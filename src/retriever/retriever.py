@@ -9,5 +9,5 @@ class Retriever(ABC):
         pass
 
     @abstractmethod
-    def prepare_retriever(self, corpus: MedQACorpus = None):
+    def prepare_retriever(self, corpus: MedQACorpus = None, create_encodings=True, create_index=True):
         pass

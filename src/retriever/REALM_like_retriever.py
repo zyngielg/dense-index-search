@@ -20,10 +20,10 @@ class REALM_like_retriever(Retriever):
     q_encoder_weights_path = ""
     num_documents = 5
 
-    faiss_index_path = "data/medqa/textbooks/chunks_100_non_processed.index"
-    document_encodings_path = "data/medqa/textbooks/encodings.pickle"
-    chunk_150_unstemmed_path = "data/chunks_150_unstemmed.pickle"
-    chunk_100_unstemmed_path = "data/chunks_100_unstemmed.pickle"
+    faiss_index_path = "data/index_chunks_150_non_processed.index"
+    document_encodings_path = "data/docoument_encodings_chunks_150_non_processed.pickle"
+    chunk_150_unstemmed_path = "data/chunks_150_non_processed.pickle"
+    chunk_100_unstemmed_path = "data/chunks_100_non_processed.pickle"
 
     def __init__(self, load_weights=False, load_index=False) -> None:
         super().__init__()
@@ -37,6 +37,11 @@ class REALM_like_retriever(Retriever):
         self.d_encoder = AutoModel.from_pretrained(self.d_encoder_bert_type)
         self.q_encoder = AutoModel.from_pretrained(self.q_encoder_bert_type)
 
+        if torch.cuda.device_count() > 1:
+            print(f"Using {torch.cuda.device_count()} GPUs")
+            self.d_encoder = torch.nn.DataParallel(self.d_encoder)
+            self.q_encoder = torch.nn.DataParallel(self.q_encoder)
+
         # loading weights
         if load_weights:
             self.q_encoder.load_state_dict(
@@ -48,6 +53,8 @@ class REALM_like_retriever(Retriever):
 
         # freezing layers
         self.freeze_layers(['pooler'])
+        self.d_encoder.to(self.device)
+        self.q_encoder.to(self.device)
 
     def retrieve_documents(self, query: str):
         query_tokenized = self.tokenizer(query,
@@ -74,7 +81,7 @@ class REALM_like_retriever(Retriever):
             else:
                 print(f"Layer {name} not frozen")
 
-    def prepare_retriever(self, corpus: MedQACorpus = None):
+    def prepare_retriever(self, corpus: MedQACorpus = None, create_encodings=True, create_index=True):
         if self.load_index is False:
             if corpus is None:
                 chunks_path = self.chunk_150_unstemmed_path
@@ -89,47 +96,55 @@ class REALM_like_retriever(Retriever):
             num_docs = len(self.corpus_chunks)
             dimension = 768
 
-            print("******** 1. Creating the chunks' encodings ********")
-            chunks_encodings = np.empty(
-                (num_docs, dimension)).astype('float32')
-            for idx, chunk in enumerate(tqdm(self.corpus_chunks)):
-                content = chunk['content']
-                content_tokenized = self.tokenizer(content,
-                                                   add_special_tokens=True,
-                                                   max_length=512,
-                                                   padding='max_length',
-                                                   truncation=True,
-                                                   return_tensors="pt")
-                encoding = self.d_encoder(**content_tokenized.to(self.device))
-                encoding = encoding.pooler_output.flatten().cpu().detach()
-                chunks_encodings[idx] = encoding
+            if create_encodings:
+                print("******** 1a. Creating the chunks' encodings ... ********")
+                chunks_encodings = np.empty(
+                    (num_docs, dimension)).astype('float32')
+                for idx, chunk in enumerate(tqdm(self.corpus_chunks)):
+                    content = chunk['content']
+                    content_tokenized = self.tokenizer(content,
+                                                       add_special_tokens=True,
+                                                       max_length=512,
+                                                       padding='max_length',
+                                                       truncation=True,
+                                                       return_tensors="pt")
+                    encoding = self.d_encoder(
+                        **content_tokenized.to(self.device))
+                    encoding = encoding.pooler_output.flatten().cpu().detach()
+                    chunks_encodings[idx] = encoding
 
-            print("********    Chunks' encodings created ********")
+                print("********     ... chunks' encodings created ********")
 
-            print("******** 2. Creating faiss index and loading the encodings *****")
-            index = faiss.IndexFlatIP(dimension)  # build a flat (CPU) index
-            if self.device != 'cpu':
-                res = faiss.StandardGpuResources()  # use a single GPU
-                index = faiss.index_cpu_to_gpu(res, 0, index)
-            index.train(chunks_encodings)
-            index.add(chunks_encodings)
-            self.index = index
-            print("********    Index created and populated ********")
+                print("******** 1b. Saving chunk encodingx to file ... ********")
+                save_pickle(chunks_encodings,
+                            file_path=self.document_encodings_path)
+                print("********     ... encodings saved *********")
+            else:
+                print("******** 1. Loading chunk encodings ... ********")
+                chunks_encodings = load_pickle(self.document_encodings_path)
+                print("********    ... encodings loaded ********")
 
-            print("******** 3. Saving the embeddings and the index to the file *********")
-            save_pickle(chunks_encodings,
-                        file_path=self.document_encodings_path)
-            print("********    Encodings saved ********")
+            if create_index:
+                print("******** 2a. Creating and populating faiss index ...  *****")
+                # build a flat (CPU) index
+                index = faiss.IndexFlatIP(dimension)
+                if self.device != 'cpu':
+                    res = faiss.StandardGpuResources()  # use a single GPU
+                    index = faiss.index_cpu_to_gpu(res, 0, index)
+                index.train(chunks_encodings)
+                index.add(chunks_encodings)
+                self.index = index
+                print("********      ... index created and populated ********")
 
-            if self.device != 'cpu':
-                index = faiss.index_gpu_to_cpu(index)
-            faiss.write_index(index, self.faiss_index_path)
-            print("********    Index saved *********")
-        else:
-            print(
-                f"******** Loading index from the file {self.faiss_index_path} ********")
-            self.index = faiss.read_index(self.faiss_index_path)
-            print(f"******** Index loaded ********")
+                print("******** 2b. Saving the index ... ********")
+                if self.device != 'cpu':
+                    index = faiss.index_gpu_to_cpu(index)
+                faiss.write_index(index, self.faiss_index_path)
+                print("********     ... index saved ********")
+            else:
+                print("******** 2. Loading faiss index ...  *****")
+                self.index = faiss.read_index(self.faiss_index_path)
+                print("********    ... index loaded ********")
 
         print("Finished Preparing the REALM-like retriever")
         quit()
