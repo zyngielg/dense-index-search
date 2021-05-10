@@ -44,7 +44,7 @@ if __name__ == "__main__":
     retriever_reader_factory = ReaderRetrieverFactory(
         retriever_choice=args.retriever, reader_choice=args.reader)
     retriever = retriever_reader_factory.create_retriever()
-    retriever.prepare_retriever(medqa_corpus)
+    retriever.prepare_retriever()
     reader = retriever_reader_factory.create_reader()
 
     if args.mode == "QA":

@@ -8,7 +8,7 @@ from transformers import AutoTokenizer, AutoModel
 from nltk.stem.snowball import SnowballStemmer
 from nltk import word_tokenize, sent_tokenize
 from tqdm import tqdm
-from utils.pickle_utils import save_pickle
+from utils.pickle_utils import save_pickle, load_pickle
 
 
 class REALM_like_retriever(Retriever):
@@ -18,8 +18,12 @@ class REALM_like_retriever(Retriever):
     stemmer = SnowballStemmer(language='english')
     # change to specify the weights file
     q_encoder_weights_path = ""
+    num_documents = 5
+
     faiss_index_path = "data/medqa/textbooks/chunks_100_non_processed.index"
     document_encodings_path = "data/medqa/textbooks/encodings.pickle"
+    chunk_150_unstemmed_path = "data/chunks_150_unstemmed.pickle"
+    chunk_100_unstemmed_path = "data/chunks_100_unstemmed.pickle"
 
     def __init__(self, load_weights=False, load_index=False) -> None:
         super().__init__()
@@ -46,7 +50,19 @@ class REALM_like_retriever(Retriever):
         self.freeze_layers(['pooler'])
 
     def retrieve_documents(self, query: str):
-        return super().retrieve_documents(query)
+        query_tokenized = self.tokenizer(query,
+                                         add_special_tokens=True,
+                                         max_length=512,
+                                         padding='max_length',
+                                         truncation=True,
+                                         return_tensors="pt")
+        query_embedding = self.q_encoder(
+            **query_tokenized.to(self.device)).pooler_output.flatten()
+        query_faiss_input = query_embedding.cpu().detach().reshape(1, 768).numpy()
+        _, I = self.index.search(query_faiss_input, self.num_documents)
+
+        retrieved_documents = [self.corpus_chunks[i] for i in I]
+        return retrieved_documents
 
     def freeze_layers(self, q_encoder_layers_to_not_freeze):
         for name, param in self.d_encoder.named_parameters():
@@ -61,23 +77,25 @@ class REALM_like_retriever(Retriever):
     def prepare_retriever(self, corpus: MedQACorpus = None):
         if self.load_index is False:
             if corpus is None:
-                print(
-                    "The corpus has not been properly initialized. Check input arguments")
-                quit()
+                chunks_path = self.chunk_150_unstemmed_path
+                print(f"Loading the corpus from {chunks_path}")
+                self.corpus_chunks = load_pickle(chunks_path)
+            else:
+                chunk_length = 150
+                self.corpus_chunks = self.__create_corpus_chunks(
+                    corpus=corpus.corpus, chunk_length=chunk_length)
+                save_pickle(self.corpus_chunks, self.chunk_150_unstemmed_path)
 
-            chunk_length = 100
-            corpus_chunks = self.__create_corpus_chunks(
-                corpus=corpus.corpus, chunk_length=chunk_length)
-
-            num_docs = len(corpus_chunks)
+            num_docs = len(self.corpus_chunks)
             dimension = 768
 
             print("******** 1. Creating the chunks' encodings ********")
             chunks_encodings = np.empty(
                 (num_docs, dimension)).astype('float32')
-            for idx, chunk in enumerate(tqdm(corpus_chunks)):
+            for idx, chunk in enumerate(tqdm(self.corpus_chunks)):
                 content = chunk['content']
-                content_tokenized = self.tokenizer(content,                                              add_special_tokens=True,
+                content_tokenized = self.tokenizer(content,
+                                                   add_special_tokens=True,
                                                    max_length=512,
                                                    padding='max_length',
                                                    truncation=True,
@@ -95,6 +113,7 @@ class REALM_like_retriever(Retriever):
                 index = faiss.index_cpu_to_gpu(res, 0, index)
             index.train(chunks_encodings)
             index.add(chunks_encodings)
+            self.index = index
             print("********    Index created and populated ********")
 
             print("******** 3. Saving the embeddings and the index to the file *********")
@@ -104,14 +123,16 @@ class REALM_like_retriever(Retriever):
 
             if self.device != 'cpu':
                 index = faiss.index_gpu_to_cpu(index)
-            faiss.write_index(
-                index, "data/five_random_quotes_size_30000.index")
+            faiss.write_index(index, self.faiss_index_path)
             print("********    Index saved *********")
         else:
             print(
                 f"******** Loading index from the file {self.faiss_index_path} ********")
-
+            self.index = faiss.read_index(self.faiss_index_path)
             print(f"******** Index loaded ********")
+
+        print("Finished Preparing the REALM-like retriever")
+        quit()
 
     def __preprocess_content(self, content, remove_stopwords, stemming, remove_punctuation):
         if not remove_stopwords and not stemming and not remove_punctuation:

@@ -120,7 +120,7 @@ class IrEsBaseBertTrainer(Trainer):
             training_time = self.format_time(time.time() - t0)
 
             print("")
-            print("  Average training loss: {0:.2f}".format(avg_train_loss))
+            print("  Average training loss: {0:.4f}".format(avg_train_loss))
             print("  Training epoch took: {:}".format(training_time))
 
             # ========================================
@@ -177,7 +177,7 @@ class IrEsBaseBertTrainer(Trainer):
 
             # Report the final accuracy for this validation run.
             avg_val_accuracy = total_eval_accuracy / len(val_dataloader)
-            print("  Accuracy: {0:.2f}".format(avg_val_accuracy))
+            print("  Accuracy: {0:.4f}".format(avg_val_accuracy))
 
             # Calculate the average loss over all of the batches.
             avg_val_loss = total_eval_loss / len(val_dataloader)
@@ -185,7 +185,7 @@ class IrEsBaseBertTrainer(Trainer):
             # Measure how long the validation run took.
             validation_time = self.format_time(time.time() - t0)
 
-            print("  Validation Loss: {0:.2f}".format(avg_val_loss))
+            print("  Validation Loss: {0:.4f}".format(avg_val_loss))
             print("  Validation took: {:}".format(validation_time))
 
             # Record all statistics from this epoch.
