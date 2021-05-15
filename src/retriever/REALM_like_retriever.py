@@ -21,7 +21,7 @@ class REALM_like_retriever(Retriever):
     num_documents = 5
 
     faiss_index_path = "data/index_chunks_150_non_processed.index"
-    document_encodings_path = "data/docoument_encodings_chunks_150_non_processed.pickle"
+    document_encodings_path = "data/document_encodings_chunks_150_non_processed.pickle"
     chunk_150_unstemmed_path = "data/chunks_150_non_processed.pickle"
     chunk_100_unstemmed_path = "data/chunks_100_non_processed.pickle"
 
@@ -68,7 +68,7 @@ class REALM_like_retriever(Retriever):
         query_faiss_input = query_embedding.cpu().detach().reshape(1, 768).numpy()
         _, I = self.index.search(query_faiss_input, self.num_documents)
 
-        retrieved_documents = [self.corpus_chunks[i] for i in I]
+        retrieved_documents = [self.corpus_chunks[i] for i in I[0]]
         return retrieved_documents
 
     def freeze_layers(self, q_encoder_layers_to_not_freeze):
@@ -128,7 +128,7 @@ class REALM_like_retriever(Retriever):
                 print("******** 2a. Creating and populating faiss index ...  *****")
                 # build a flat (CPU) index
                 index = faiss.IndexFlatIP(dimension)
-                if self.device != 'cpu':
+                if self.device.type != 'cpu':
                     res = faiss.StandardGpuResources()  # use a single GPU
                     index = faiss.index_cpu_to_gpu(res, 0, index)
                 index.train(chunks_encodings)
@@ -137,7 +137,7 @@ class REALM_like_retriever(Retriever):
                 print("********      ... index created and populated ********")
 
                 print("******** 2b. Saving the index ... ********")
-                if self.device != 'cpu':
+                if self.device.type != 'cpu':
                     index = faiss.index_gpu_to_cpu(index)
                 faiss.write_index(index, self.faiss_index_path)
                 print("********     ... index saved ********")
@@ -146,8 +146,7 @@ class REALM_like_retriever(Retriever):
                 self.index = faiss.read_index(self.faiss_index_path)
                 print("********    ... index loaded ********")
 
-        print("Finished Preparing the REALM-like retriever")
-        quit()
+        print("*** Finished Preparing the REALM-like retriever ***")
 
     def __preprocess_content(self, content, remove_stopwords, stemming, remove_punctuation):
         if not remove_stopwords and not stemming and not remove_punctuation:
