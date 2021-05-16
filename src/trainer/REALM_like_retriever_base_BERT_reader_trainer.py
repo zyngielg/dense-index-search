@@ -76,8 +76,9 @@ class REALM_like_retriever_base_BERT_reader_trainer(Trainer):
                     print(
                         f'Batch {step} of {len(train_dataloader)}. Elapsed: {elapsed}')
 
-                self.reader.model.zero_grad()  # no difference if model or optimizer.zero_grad
-                self.retriever.q_encoder.zero_grad()
+                optimizer.zero_grad()
+                # self.reader.model.zero_grad()  # no difference if model or optimizer.zero_grad
+                # self.retriever.q_encoder.zero_grad()
 
                 questions = batch[0]
                 answers = batch[1]
@@ -90,9 +91,9 @@ class REALM_like_retriever_base_BERT_reader_trainer(Trainer):
                 attention_masks = []
 
                 for q_idx in range(len(questions)):
-                    query = ' '.join(metamap_phrases[q_idx])
+                    # query = ' '.join(metamap_phrases[q_idx])
                     # or
-                    # query = questions[q_idx]
+                    query = questions[q_idx]
                     query_options = [query + ' ' + x[q_idx] for x in options]
                     retrieved_documents = [
                         self.retriever.retrieve_documents(x) for x in query_options]
@@ -116,7 +117,6 @@ class REALM_like_retriever_base_BERT_reader_trainer(Trainer):
 
                 output = self.reader.model(
                     input_ids=tensor_input_ids.to(device), attention_mask=tensor_token_type_ids.to(device), token_type_ids=tensor_attention_masks.to(device))
-                output = self.reader.softmax(output)
 
                 loss = criterion(output, answers_indexes.to(device))
                 if num_gpus > 1:
@@ -175,9 +175,9 @@ class REALM_like_retriever_base_BERT_reader_trainer(Trainer):
                 attention_masks = []
 
                 for q_idx in range(len(questions)):
-                    query = ' '.join(metamap_phrases[q_idx])
+                    # query = ' '.join(metamap_phrases[q_idx])
                     # or
-                    # query = questions[q_idx]
+                    query = questions[q_idx]
                     query_options = [query + ' ' + x[q_idx] for x in options]
                     retrieved_documents = [
                         self.retriever.retrieve_documents(x) for x in query_options]
@@ -201,7 +201,6 @@ class REALM_like_retriever_base_BERT_reader_trainer(Trainer):
                 with torch.no_grad():
                     output = self.reader.model(
                         input_ids=tensor_input_ids.to(device), attention_mask=tensor_token_type_ids.to(device), token_type_ids=tensor_attention_masks.to(device))
-                output = self.reader.softmax(output)
                 loss = criterion(output, answers_indexes.to(device))
                 if num_gpus > 1:
                     loss = loss.mean()
@@ -253,16 +252,16 @@ class REALM_like_retriever_base_BERT_reader_trainer(Trainer):
         now = datetime.datetime.now()
         dt_string = now.strftime("%Y-%m-%d_%H:%M:%S")
         # saving training stats
-        training_stats_file = f"src/trainer/results/{dt_string}/training_stats.txt"
+        training_stats_file = f"src/trainer/results/{dt_string}__REALM_like+base_BERT__training_stats.txt"
         with open(training_stats_file, 'w') as results_file:
             results_file.write(str(training_info))
         print(f"Results saved in {training_stats_file}")
         # saving the retriever's q_encoder weights
-        retriever_file_name = f"src/trainer/results/{dt_string}/REALM_like+base_BERT__retriever.pth"
+        retriever_file_name = f"src/trainer/results/{dt_string}__REALM_like+base_BERT__retriever.pth"
         torch.save(self.retriever.q_encoder.state_dict(), retriever_file_name)
         print(f"Q_encoder weights saved in {retriever_file_name}")
         # saving the reader weights
-        reader_file_name = f"src/trainer/results/{dt_string}/REALM_like+base_BERT__reader.pth"
+        reader_file_name = f"src/trainer/results/{dt_string}__REALM_like+base_BERT__reader.pth"
         torch.save(self.reader.model.state_dict(), reader_file_name)
         print(f"Reader weights saved in {retriever_file_name}")
 

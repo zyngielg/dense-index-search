@@ -23,6 +23,7 @@ class BaseBERTLinear(torch.nn.Module):
         bert_output = self.bert(input_ids=flat_input_ids,
                                 attention_mask=flat_attention_mask,
                                 token_type_ids=flat_token_type_ids)
-        linear_output = self.linear(bert_output.pooler_output)
+        pooler_output = self.dropout(bert_output.pooler_output)
+        linear_output = self.linear(pooler_output)
         output_reshaped = linear_output.view(-1, 4)
         return output_reshaped
