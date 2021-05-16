@@ -12,50 +12,12 @@ import random
 import numpy as np
 import time
 import datetime
+from utils.pickle_utils import save_pickle
 
 
 class REALM_like_retriever_base_BERT_reader_trainer(Trainer):
     def __init__(self, questions: MedQAQuestions, retriever: REALM_like_retriever, reader: Reader, num_epochs: int, batch_size: int, lr: float) -> None:
         super().__init__(questions, retriever, reader, num_epochs, batch_size, lr)
-
-    def __create_tokenized_input(self, questions, tokenizer):
-        def letter_answer_to_index(answer):
-            return ord(answer) - 65
-
-        input_queries = []
-        input_answers = []
-        input_answers_idx = []
-
-        for question_id, question_data in tqdm(questions.items()):
-            question = question_data['question']
-            metamap_phrases = question_data['metamap_phrases']
-            queries = []
-            for option in question_data['options'].values():
-                qa_retrieval = ' '.join(metamap_phrases) + ' ' + option
-                qa_inference = f"{question} {option}"
-
-                _, retrieved_documents = self.retriever.retrieve_documents(
-                    query=qa_retrieval)
-
-                context = ' '.join(retrieved_documents)
-                query = tokenizer(context, qa_inference, add_special_tokens=True,
-                                  max_length=512, padding='max_length', truncation=True, return_tensors="pt")
-                query_input_ids = query["input_ids"].flatten()
-                # decoded = tokenizer.decode(query_input_ids)
-                query_token_type_ids = query["token_type_ids"].flatten()
-                query_attention_mask = query["attention_mask"].flatten()
-
-                queries.append({
-                    "input_ids": query_input_ids,
-                    "token_type_ids": query_token_type_ids,
-                    "attention_mask": query_attention_mask
-                })
-            input_queries.append(queries)
-            input_answers.append(question_data["answer"])
-
-            input_answers_idx.append(
-                letter_answer_to_index(question_data['answer_idx']))
-        return input_queries, input_answers, input_answers_idx
 
     def pepare_data_loader(self):
         print("******** Creating train dataloader ********")
@@ -82,7 +44,13 @@ class REALM_like_retriever_base_BERT_reader_trainer(Trainer):
         torch.manual_seed(seed_val)
         torch.cuda.manual_seed_all(seed_val)
 
-        training_stats = []
+        training_info = {
+            "retriever": self.retriever.get_info(),
+            "reader": self.reader.get_info(),
+            "tokenizer": self.retriever.tokenizer_type,
+            "total_training_time": None,
+            "training_stats": []
+        }
 
         criterion = torch.nn.CrossEntropyLoss()
         params = list(self.retriever.q_encoder.parameters()) + \
@@ -157,8 +125,8 @@ class REALM_like_retriever_base_BERT_reader_trainer(Trainer):
                 loss.backward()
                 # Clip the norm of the gradients to 1.0.
                 # This is to help prevent the "exploding gradients" problem.
-                torch.nn.utils.clip_grad_norm_(
-                    self.reader.model.parameters(), 1.0)
+                # torch.nn.utils.clip_grad_norm_(
+                #     self.reader.model.parameters(), 1.0)
 
                 # Update parameters and take a step using the computed gradient.
                 # The optimizer dictates the "update rule"--how the parameters are
@@ -264,7 +232,7 @@ class REALM_like_retriever_base_BERT_reader_trainer(Trainer):
             print("  Validation took: {:}".format(validation_time))
 
             # Record all statistics from this epoch.
-            training_stats.append(
+            training_info['training_stats'].append(
                 {
                     'epoch': epoch + 1,
                     'Training Loss': avg_train_loss,
@@ -278,12 +246,24 @@ class REALM_like_retriever_base_BERT_reader_trainer(Trainer):
         print("")
         print("Training complete!")
 
-        print("Total training took {:} (h:mm:ss)".format(
-            self.format_time(time.time()-total_t0)))
+        total_training_time = self.format_time(time.time()-total_t0)
+        training_info['total_training_time'] = total_training_time
+        print(f"Total training took {training_time} (h:mm:ss)")
 
         now = datetime.datetime.now()
         dt_string = now.strftime("%Y-%m-%d_%H:%M:%S")
-        model_name = f"src/trainer/results/{dt_string}__retriever:REALM_like__reader:base_BERT.pth"
-        torch.save(self.reader.model.state_dict(), model_name)
-        print(f"Model weights saved in {model_name}")
+        # saving training stats
+        training_stats_file = f"src/trainer/results/{dt_string}/training_stats.txt"
+        with open(training_stats_file, 'w') as results_file:
+            results_file.write(str(training_info))
+        print(f"Results saved in {training_stats_file}")
+        # saving the retriever's q_encoder weights
+        retriever_file_name = f"src/trainer/results/{dt_string}/REALM_like+base_BERT__retriever.pth"
+        torch.save(self.retriever.q_encoder.state_dict(), retriever_file_name)
+        print(f"Q_encoder weights saved in {retriever_file_name}")
+        # saving the reader weights
+        reader_file_name = f"src/trainer/results/{dt_string}/REALM_like+base_BERT__reader.pth"
+        torch.save(self.reader.model.state_dict(), reader_file_name)
+        print(f"Reader weights saved in {retriever_file_name}")
+
         print("***** Training completed *****")

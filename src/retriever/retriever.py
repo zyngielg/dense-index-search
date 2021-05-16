@@ -11,3 +11,7 @@ class Retriever(ABC):
     @abstractmethod
     def prepare_retriever(self, corpus: MedQACorpus = None, create_encodings=True, create_index=True):
         pass
+    
+    @abstractmethod
+    def get_info(self):
+        pass

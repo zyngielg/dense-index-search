@@ -19,6 +19,7 @@ class REALM_like_retriever(Retriever):
     # change to specify the weights file
     q_encoder_weights_path = ""
     num_documents = 5
+    q_encoder_layers_to_not_freeze = ['10', '11', 'pooler']  
 
     faiss_index_path = "data/index_chunks_150_non_processed.index"
     document_encodings_path = "data/document_encodings_chunks_150_non_processed.pickle"
@@ -27,6 +28,7 @@ class REALM_like_retriever(Retriever):
 
     def __init__(self, load_weights=False, load_index=False) -> None:
         super().__init__()
+        self.load_weights = load_weights
         self.load_index = load_index
         self.device = torch.device(
             'cuda') if torch.cuda.is_available() else torch.device('cpu')
@@ -52,9 +54,28 @@ class REALM_like_retriever(Retriever):
             self.index = faiss.read_index(self.faiss_index_path)
 
         # freezing layers
-        self.freeze_layers(['pooler'])
+        self.freeze_layers()
         self.d_encoder.to(self.device)
         self.q_encoder.to(self.device)
+
+        # info about used chunks
+        self.used_chunks_size = 150
+
+    def get_info(self):
+        info = {}
+        info['num documents retrieved'] = self.num_documents
+
+        info['q_encoder'] = self.q_encoder_bert_type
+        info['layers not to freeze'] = self.q_encoder_layers_to_not_freeze
+        info['weights loaded'] = self.load_weights
+        if self.load_weights:
+            info['weights path'] = self.q_encoder_weights_path
+        info['index loaded'] = self.load_index
+        if self.load_index:
+            info['index path'] = self.faiss_index_path
+        info['chunk_size_used'] = self.used_chunks_size
+        
+        return info
 
     def retrieve_documents(self, query: str):
         query_tokenized = self.tokenizer(query,
@@ -71,12 +92,12 @@ class REALM_like_retriever(Retriever):
         retrieved_documents = [self.corpus_chunks[i] for i in I[0]]
         return retrieved_documents
 
-    def freeze_layers(self, q_encoder_layers_to_not_freeze):
+    def freeze_layers(self):
         for name, param in self.d_encoder.named_parameters():
             param.requires_grad = False
 
         for name, param in self.q_encoder.named_parameters():
-            if not any(x in name for x in q_encoder_layers_to_not_freeze):
+            if not any(x in name for x in self.q_encoder_layers_to_not_freeze):
                 param.requires_grad = False
             else:
                 print(f"Layer {name} not frozen")
@@ -84,13 +105,15 @@ class REALM_like_retriever(Retriever):
     def prepare_retriever(self, corpus: MedQACorpus = None, create_encodings=True, create_index=True):
         if self.load_index is False:
             if corpus is None:
-                chunks_path = self.chunk_150_unstemmed_path
+                if self.used_chunks_size == 100:
+                    chunks_path = self.chunk_100_unstemmed_path
+                elif self.used_chunks_size == 150:
+                    chunks_path = self.chunk_150_unstemmed_path
                 print(f"Loading the corpus from {chunks_path}")
                 self.corpus_chunks = load_pickle(chunks_path)
             else:
-                chunk_length = 150
                 self.corpus_chunks = self.__create_corpus_chunks(
-                    corpus=corpus.corpus, chunk_length=chunk_length)
+                    corpus=corpus.corpus, chunk_length=self.used_chunks_size)
                 save_pickle(self.corpus_chunks, self.chunk_150_unstemmed_path)
 
             num_docs = len(self.corpus_chunks)

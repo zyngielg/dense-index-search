@@ -28,7 +28,7 @@ class IrEsBaseBertTrainer(Trainer):
             questions=self.questions_train, tokenizer=self.reader.tokenizer, train_set=True)
 
         train_dataloader = create_medqa_data_loader(input_queries=train_input_queries, input_answers=train_input_answers,
-                                              input_answers_idx=train_input_answers_idx, batch_size=self.batch_size)
+                                                    input_answers_idx=train_input_answers_idx, batch_size=self.batch_size)
         print("******** Train dataloader created  ********")
 
         print("******** Creating val dataloader ********")
@@ -36,7 +36,7 @@ class IrEsBaseBertTrainer(Trainer):
         val_input_queries, val_input_answers, val_input_answers_idx = self.retriever.create_tokenized_input(
             questions=self.questions_val, tokenizer=self.reader.tokenizer, train_set=False)
         val_dataloader = create_medqa_data_loader(input_queries=val_input_queries, input_answers=val_input_answers,
-                                            input_answers_idx=val_input_answers_idx, batch_size=self.batch_size)
+                                                  input_answers_idx=val_input_answers_idx, batch_size=self.batch_size)
         print("******** Val dataloader created  ********")
 
         return train_dataloader, val_dataloader
@@ -51,7 +51,12 @@ class IrEsBaseBertTrainer(Trainer):
         torch.cuda.manual_seed_all(seed_val)
         total_t0 = time.time()
 
-        training_stats = []
+        training_info = {
+            "retriever": self.retriever.get_info(),
+            "reader": self.reader.get_info(),
+            "total_training_time": None,
+            "training_stats": []
+        }
 
         criterion = torch.nn.CrossEntropyLoss()
         optimizer = torch.optim.AdamW(
@@ -189,7 +194,7 @@ class IrEsBaseBertTrainer(Trainer):
             print("  Validation took: {:}".format(validation_time))
 
             # Record all statistics from this epoch.
-            training_stats.append(
+            training_info['training_stats'].append(
                 {
                     'epoch': epoch + 1,
                     'Training Loss': avg_train_loss,
@@ -202,13 +207,18 @@ class IrEsBaseBertTrainer(Trainer):
 
         print("")
         print("Training complete!")
-
-        print("Total training took {:} (h:mm:ss)".format(
-            self.format_time(time.time()-total_t0)))
+        total_training_time = self.format_time(time.time()-total_t0)
+        training_info['total_training_time'] = total_training_time
+        print(f"Total training took {training_time} (h:mm:ss)")
 
         now = datetime.datetime.now()
         dt_string = now.strftime("%Y-%m-%d_%H:%M:%S")
-        model_name = f"src/trainer/results/{dt_string}__reader:IRES__retriever:BERT_linear.pth"
-        torch.save(self.reader.model.state_dict(), model_name)
-        print(f"Model weights saved in {model_name}")
+        # saving training stats
+        training_stats_file = f"src/trainer/results/{dt_string}/training_stats.txt"
+        with open(training_stats_file, 'w') as results_file:
+            results_file.write(str(training_info))
+        # saving the reader weights
+        reader_file_name = f"src/trainer/results/{dt_string}IRES+base_BERT__reader.pth"
+        torch.save(self.reader.model.state_dict(), reader_file_name)
+        print(f"Reader weights saved in {reader_file_name}")
         print("***** Training completed *****")

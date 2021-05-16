@@ -22,7 +22,18 @@ class IR_ES(Retriever):
     def __init__(self, from_es_session=False):
         self.from_es_session = from_es_session
 
-    def prepare_retriever(self, corpus=None):
+    def get_info(self):
+        info = {}
+        info['from es session'] = self.from_es_session
+        if not self.from_es_session:
+            info['train searches loaded from'] = self.retrieved_documents_train_path
+            info['val searches loaded from'] = self.retrieved_documents_val_path
+        info['num of docs retrieved'] = self.num_of_documents_to_retrieve
+        info['index name'] = self.index_name
+        
+        return info
+
+    def prepare_retriever(self, corpus=None, create_encodings=None, create_index=None):
         if self.from_es_session is True:
             self.es = Elasticsearch(hosts=self.host, port=self.port)
             if not self.es.ping():
