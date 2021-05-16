@@ -19,7 +19,7 @@ class REALM_like_retriever(Retriever):
     # change to specify the weights file
     q_encoder_weights_path = ""
     num_documents = 5
-    q_encoder_layers_to_not_freeze = ['10', '11', 'pooler']  
+    q_encoder_layers_to_not_freeze = ['9', '10', '11', 'pooler']
 
     faiss_index_path = "data/index_chunks_150_non_processed.index"
     document_encodings_path = "data/document_encodings_chunks_150_non_processed.pickle"
@@ -74,7 +74,7 @@ class REALM_like_retriever(Retriever):
         if self.load_index:
             info['index path'] = self.faiss_index_path
         info['chunk_size_used'] = self.used_chunks_size
-        
+
         return info
 
     def retrieve_documents(self, query: str):
@@ -100,7 +100,8 @@ class REALM_like_retriever(Retriever):
             if not any(x in name for x in self.q_encoder_layers_to_not_freeze):
                 param.requires_grad = False
             else:
-                print(f"Layer {name} not frozen")
+                print(
+                    f"Layer {name} not frozen (status: {param.requires_grad})")
 
     def prepare_retriever(self, corpus: MedQACorpus = None, create_encodings=True, create_index=True):
         if self.load_index is False:

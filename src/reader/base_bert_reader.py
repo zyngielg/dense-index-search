@@ -12,7 +12,7 @@ class Base_BERT_Reader(Reader):
     weights_file_directory = "src/trainer/results"
     weights_file_name = "2021-04-30_16:08:19 reader IRES retriever BERT_linear.pth"
     weights_file_path = f"{weights_file_directory}/{weights_file_name}"
-    layers_to_not_freeze = ['10', '11', 'linear', 'pooler']  
+    layers_to_not_freeze = ['9', '10', '11', 'linear', 'pooler']  
 
     def __init__(self, load_weights=False):
         self.load_weights = load_weights
@@ -43,7 +43,7 @@ class Base_BERT_Reader(Reader):
             if not any(x in name for x in self.layers_to_not_freeze):
                 param.requires_grad = False
             else:
-                print(f"Layer {name} not frozen")
+                print(f"Layer {name} not frozen (status: {param.requires_grad})")
                 
     def get_info(self):
         info = {}
