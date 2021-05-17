@@ -91,9 +91,9 @@ class REALM_like_retriever_base_BERT_reader_trainer(Trainer):
                 attention_masks = []
 
                 for q_idx in range(len(questions)):
-                    # query = ' '.join(metamap_phrases[q_idx])
+                    query = ' '.join(metamap_phrases[q_idx])
                     # or
-                    query = questions[q_idx]
+                    # query = questions[q_idx]
                     query_options = [query + ' ' + x[q_idx] for x in options]
                     retrieved_documents = [
                         self.retriever.retrieve_documents(x) for x in query_options]
@@ -175,9 +175,9 @@ class REALM_like_retriever_base_BERT_reader_trainer(Trainer):
                 attention_masks = []
 
                 for q_idx in range(len(questions)):
-                    # query = ' '.join(metamap_phrases[q_idx])
+                    query = ' '.join(metamap_phrases[q_idx])
                     # or
-                    query = questions[q_idx]
+                    # query = questions[q_idx]
                     query_options = [query + ' ' + x[q_idx] for x in options]
                     retrieved_documents = [
                         self.retriever.retrieve_documents(x) for x in query_options]
