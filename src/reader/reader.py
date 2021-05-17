@@ -9,3 +9,7 @@ class Reader(ABC):
     @abstractmethod
     def choose_answer(self, query, context, question_data):
         pass
+    
+    @abstractmethod
+    def get_info(self):
+        pass
