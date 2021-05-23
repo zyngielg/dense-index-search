@@ -1,17 +1,17 @@
-from retriever.retriever import Retriever
-from elasticsearch import Elasticsearch
-from tqdm import tqdm
-from utils.es_utils import Indexes
-import utils.es_utils as es_utils
 import numpy as np
-
+import torch
+import utils.es_utils as es_utils
 import utils.pickle_utils as pickle_utils
+
+from elasticsearch import Elasticsearch
+from retriever.retriever import Retriever
+from tqdm import tqdm
 
 
 class IR_ES(Retriever):
     stemmed = True
 
-    index_name = Indexes.MedQA_chunks_50.value
+    index_name = es_utils.Indexes.MedQA_chunks_50.value
     num_of_documents_to_retrieve = 20
     host = ['http://localhost']
     port = '9200'
@@ -30,7 +30,7 @@ class IR_ES(Retriever):
             info['val searches loaded from'] = self.retrieved_documents_val_path
         info['num of docs retrieved'] = self.num_of_documents_to_retrieve
         info['index name'] = self.index_name
-        
+
         return info
 
     def prepare_retriever(self, corpus=None, create_encodings=None, create_index=None):
@@ -75,7 +75,11 @@ class IR_ES(Retriever):
         for question_id, question_data in tqdm(questions.items()):
             question = question_data['question']
             metamap_phrases = question_data['metamap_phrases']
-            queries = []
+
+            input_ids = []
+            token_type_ids = []
+            attention_masks = []
+
             for option in question_data['options'].values():
                 qa_retrieval = ' '.join(metamap_phrases) + ' ' + option
                 qa_inference = f"{question} {option}"
@@ -86,21 +90,25 @@ class IR_ES(Retriever):
                 context = ' '.join(retrieved_documents)
                 query = tokenizer(context, qa_inference, add_special_tokens=True,
                                   max_length=512, padding='max_length', truncation=True, return_tensors="pt")
-                query_input_ids = query["input_ids"].flatten()
+                input_ids.append(query["input_ids"].flatten())
                 # decoded = tokenizer.decode(query_input_ids)
-                query_token_type_ids = query["token_type_ids"].flatten()
-                query_attention_mask = query["attention_mask"].flatten()
+                token_type_ids.append(query["token_type_ids"].flatten())
+                attention_masks.append(query["attention_mask"].flatten())
 
-                queries.append({
-                    "input_ids": query_input_ids,
-                    "token_type_ids": query_token_type_ids,
-                    "attention_mask": query_attention_mask
-                })
-            input_queries.append(queries)
+            tensor_input_ids = torch.stack(input_ids, dim=0)
+            tensor_token_type_ids = torch.stack(token_type_ids, dim=0)
+            tensor_attention_masks = torch.stack(attention_masks, dim=0)
+
+            input_queries.append({
+                "input_ids": tensor_input_ids,
+                "token_type_ids": tensor_token_type_ids,
+                "attention_mask": tensor_attention_masks
+            })
             input_answers.append(question_data["answer"])
 
             input_answers_idx.append(
                 letter_answer_to_index(question_data['answer_idx']))
+
         return input_queries, input_answers, input_answers_idx
 
     def retrieve_documents(self, query=None, question_id=None, option=None, train=False):
@@ -131,14 +139,14 @@ class IR_ES(Retriever):
         correct_answer = 0
         incorrect_answer = 0
 
-        for question_id, question_data in tqdm(questions.items()):
+        for question_data in tqdm(questions.values()):
             question = question_data['question']
             answer = question_data['answer']
 
             final_answer = None
             final_score = 0
 
-            for option, option_answer in question_data['options'].items():
+            for option_answer in question_data['options'].values():
                 # query = ' '.join(question_data['metamap_phrases']) + " " + option_answer
                 query = question + " " + option_answer
                 top_documents, _ = self.retrieve_documents(query)
@@ -147,10 +155,9 @@ class IR_ES(Retriever):
                     if final_score < score:
                         final_answer = option_answer
                         final_score = score
-            correct = False
+
             if final_answer == answer:
                 correct_answer += 1
-                correct = True
             else:
                 incorrect_answer += 1
 
