@@ -1,18 +1,16 @@
+import datetime
+import json
+import numpy as np
+import random
+import time
+import torch
+
+from data.data_loader import create_questions_data_loader
 from data.medqa_questions import MedQAQuestions
 from reader.reader import Reader
 from retriever.REALM_like_retriever import REALM_like_retriever
-from retriever.retriever import Retriever
 from trainer.trainer import Trainer
 from transformers import get_linear_schedule_with_warmup
-from data.data_loader import create_medqa_data_loader, create_questions_data_loader
-from tqdm import tqdm
-
-import torch
-import random
-import numpy as np
-import time
-import datetime
-from utils.pickle_utils import save_pickle
 
 
 class REALM_like_retriever_base_BERT_reader_trainer(Trainer):
@@ -35,7 +33,6 @@ class REALM_like_retriever_base_BERT_reader_trainer(Trainer):
     def train(self):
         super().train()
         total_t0 = time.time()
-        num_gpus = torch.cuda.device_count()
 
         device = self.reader.device
         seed_val = 42
@@ -77,7 +74,7 @@ class REALM_like_retriever_base_BERT_reader_trainer(Trainer):
                         f'Batch {step} of {len(train_dataloader)}. Elapsed: {elapsed}')
 
                 optimizer.zero_grad()
-                # self.reader.model.zero_grad()  # no difference if model or optimizer.zero_grad
+                # self.reader.model.zero_grad()
                 # self.retriever.q_encoder.zero_grad()
 
                 questions = batch[0]
@@ -119,7 +116,7 @@ class REALM_like_retriever_base_BERT_reader_trainer(Trainer):
                     input_ids=tensor_input_ids.to(device), attention_mask=tensor_token_type_ids.to(device), token_type_ids=tensor_attention_masks.to(device))
 
                 loss = criterion(output, answers_indexes.to(device))
-                if num_gpus > 1:
+                if self.num_gpus > 1:
                     loss = loss.mean()
                 total_train_loss += loss.item()
                 loss.backward()
@@ -164,8 +161,11 @@ class REALM_like_retriever_base_BERT_reader_trainer(Trainer):
 
             # Evaluate data for one epoch
             for step, batch in enumerate(val_dataloader):
+                if step % 25 == 0 and not step == 0:
+                    elapsed = self.format_time(time.time() - t0)
+                    print(
+                        f'Batch {step} of {len(train_dataloader)}. Elapsed: {elapsed}')
                 questions = batch[0]
-                answers = batch[1]
                 answers_indexes = batch[2]
                 options = batch[3]
                 metamap_phrases = batch[4]
@@ -202,7 +202,7 @@ class REALM_like_retriever_base_BERT_reader_trainer(Trainer):
                     output = self.reader.model(
                         input_ids=tensor_input_ids.to(device), attention_mask=tensor_token_type_ids.to(device), token_type_ids=tensor_attention_masks.to(device))
                 loss = criterion(output, answers_indexes.to(device))
-                if num_gpus > 1:
+                if self.num_gpus > 1:
                     loss = loss.mean()
                 # Accumulate the validation loss.
                 total_eval_loss += loss.item()
@@ -252,9 +252,9 @@ class REALM_like_retriever_base_BERT_reader_trainer(Trainer):
         now = datetime.datetime.now()
         dt_string = now.strftime("%Y-%m-%d_%H:%M:%S")
         # saving training stats
-        training_stats_file = f"src/trainer/results/{dt_string}__REALM_like+base_BERT__training_stats.txt"
+        training_stats_file = f"src/trainer/results/{dt_string}__REALM_like+base_BERT__training_stats.json"
         with open(training_stats_file, 'w') as results_file:
-            results_file.write(str(training_info))
+            json.dump(training_info, results_file)
         print(f"Results saved in {training_stats_file}")
         # saving the retriever's q_encoder weights
         retriever_file_name = f"src/trainer/results/{dt_string}__REALM_like+base_BERT__retriever.pth"

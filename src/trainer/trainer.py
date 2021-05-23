@@ -1,4 +1,5 @@
 import datetime
+import torch
 
 from abc import ABC, abstractclassmethod
 from data.medqa_questions import MedQAQuestions
@@ -20,6 +21,7 @@ class Trainer(ABC):
         self.lr = lr
         self.num_answers = len(
             list(self.questions_train.values())[0]['options'])
+        self.num_gpus = torch.cuda.device_count()
 
     @abstractclassmethod
     def train(self):

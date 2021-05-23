@@ -1,18 +1,16 @@
-from reader.base_bert_reader import Base_BERT_Reader
-from reader.reader import Reader
-from retriever.ir_es import IR_ES
-from data.medqa_questions import MedQAQuestions
-from transformers import get_linear_schedule_with_warmup
-from tqdm import tqdm
+import datetime
+import json
 import numpy as np
 import random
 import time
 import torch
-import time
-import datetime
+
 from data.data_loader import create_medqa_data_loader
+from data.medqa_questions import MedQAQuestions
+from reader.reader import Reader
 from retriever.retriever import Retriever
 from trainer.trainer import Trainer
+from transformers import get_linear_schedule_with_warmup
 
 # TODO: currently after 3 epochs the loss and the accuracy remain the same
 # check whether the input to BERT should be reformatted compared to the current one
@@ -38,7 +36,6 @@ class IrEsBaseBertTrainer(Trainer):
         val_dataloader = create_medqa_data_loader(input_queries=val_input_queries, input_answers=val_input_answers,
                                                   input_answers_idx=val_input_answers_idx, batch_size=self.batch_size)
         print("******** Val dataloader created  ********")
-
         return train_dataloader, val_dataloader
 
     def train(self):
@@ -80,29 +77,24 @@ class IrEsBaseBertTrainer(Trainer):
                     print(
                         f'Batch {step} of {len(train_dataloader)}. Elapsed: {elapsed}')
 
-                self.reader.model.zero_grad()  # no difference if model or optimizer.zero_grad
+                optimizer.zero_grad()  # no difference if model or optimizer.zero_grad
 
                 questions_queries_collection = batch[0]
-                answers = batch[1]
                 answers_indexes = batch[2]
-                queries_outputs = []
-                for question_queries in questions_queries_collection:
-                    input_ids = question_queries["input_ids"]
-                    input_token_type_ids = question_queries["token_type_ids"]
-                    input_attention_mask = question_queries["attention_mask"]
 
-                    # the forward pass, since this is only needed for backprop (training).
-                    # Tell pytorch not to bother with constructing the compute graph during
-                    output = self.reader.model(
-                        input_ids=input_ids.to(device), attention_mask=input_attention_mask.to(device), token_type_ids=input_token_type_ids.to(device))
-                    queries_outputs.append(output)
-                # each row represents values for the same question, each column represents an output for an answer option
-                queries_outputs = torch.stack(queries_outputs).reshape(
-                    [self.num_answers, len(answers)]).transpose(0, 1)
-                # choosing the indexes of the answers with the highest post-softmax value
-                output = self.reader.softmax(queries_outputs)
+                # get the tensors
+                input_ids = questions_queries_collection["input_ids"]
+                input_token_type_ids = questions_queries_collection["token_type_ids"]
+                input_attention_mask = questions_queries_collection["attention_mask"]
+
+                output = self.reader.model(input_ids=input_ids.to(device),
+                                           attention_mask=input_attention_mask.to(
+                                               device),
+                                           token_type_ids=input_token_type_ids.to(device))
 
                 loss = criterion(output, answers_indexes.to(device))
+                if self.num_gpus > 1:
+                    loss = loss.mean()
                 total_train_loss += loss.item()
                 loss.backward()
                 # Clip the norm of the gradients to 1.0.
@@ -146,32 +138,27 @@ class IrEsBaseBertTrainer(Trainer):
             # Evaluate data for one epoch
             for step, batch in enumerate(val_dataloader):
                 questions_queries_collection = batch[0]
-                answers = batch[1]
                 answers_indexes = batch[2]
 
-                queries_outputs = []
-                for question_queries in questions_queries_collection:
-                    input_ids = question_queries["input_ids"]
-                    input_token_type_ids = question_queries["token_type_ids"]
-                    input_attention_mask = question_queries["attention_mask"]
+                # get the tensors
+                input_ids = questions_queries_collection["input_ids"]
+                input_token_type_ids = questions_queries_collection["token_type_ids"]
+                input_attention_mask = questions_queries_collection["attention_mask"]
 
-                    # Tell pytorch not to bother with constructing the compute graph during
-                    # the forward pass, since this is only needed for backprop (training).
-                    with torch.no_grad():
-                        output = self.reader.model(
-                            input_ids=input_ids.to(device), attention_mask=input_attention_mask.to(device), token_type_ids=input_token_type_ids.to(device))
-                    queries_outputs.append(output)
+                with torch.no_grad():
+                    output = self.reader.model(input_ids=input_ids.to(device),
+                                               attention_mask=input_attention_mask.to(
+                                                   device),
+                                               token_type_ids=input_token_type_ids.to(device))
 
-                queries_outputs = torch.stack(queries_outputs).reshape(
-                    [self.num_answers, len(answers)]).transpose(0, 1)
-                output = self.reader.softmax(queries_outputs)
                 loss = criterion(output, answers_indexes.to(device))
 
-                # Accumulate the validation loss.
+                if self.num_gpus > 1:
+                    loss = loss.mean()
                 total_eval_loss += loss.item()
 
                 # Move logits and labels to CPU
-                if device == 'cpu':
+                if device.type == 'cpu':
                     output = output.numpy()
                     answers_indexes = answers_indexes.numpy()
                 else:
@@ -214,11 +201,11 @@ class IrEsBaseBertTrainer(Trainer):
         now = datetime.datetime.now()
         dt_string = now.strftime("%Y-%m-%d_%H:%M:%S")
         # saving training stats
-        training_stats_file = f"src/trainer/results/{dt_string}/training_stats.txt"
+        training_stats_file = f"src/trainer/results/{dt_string}__training_stats.json"
         with open(training_stats_file, 'w') as results_file:
-            results_file.write(str(training_info))
+            json.dump(training_info, results_file)
         # saving the reader weights
-        reader_file_name = f"src/trainer/results/{dt_string}IRES+base_BERT__reader.pth"
+        reader_file_name = f"src/trainer/results/{dt_string}__IRES+base_BERT__reader.pth"
         torch.save(self.reader.model.state_dict(), reader_file_name)
         print(f"Reader weights saved in {reader_file_name}")
         print("***** Training completed *****")
