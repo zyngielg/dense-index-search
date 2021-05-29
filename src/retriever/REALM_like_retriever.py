@@ -12,17 +12,20 @@ from utils.pickle_utils import save_pickle, load_pickle
 
 
 class REALM_like_retriever(Retriever):
-    tokenizer_type = "microsoft/BiomedNLP-PubMedBERT-base-uncased-abstract"
-    d_encoder_bert_type = "microsoft/BiomedNLP-PubMedBERT-base-uncased-abstract"
-    q_encoder_bert_type = "microsoft/BiomedNLP-PubMedBERT-base-uncased-abstract"
+    # "microsoft/BiomedNLP-PubMedBERT-base-uncased-abstract"
+    tokenizer_type = "emilyalsentzer/Bio_ClinicalBERT"
+    d_encoder_bert_type = "emilyalsentzer/Bio_ClinicalBERT"
+    q_encoder_bert_type = "emilyalsentzer/Bio_ClinicalBERT"
     stemmer = SnowballStemmer(language='english')
     # change to specify the weights file
     q_encoder_weights_path = ""
     num_documents = 5
     q_encoder_layers_to_not_freeze = ['9', '10', '11', 'pooler']
 
-    faiss_index_path = "data/index_chunks_150_non_processed.index"
-    document_encodings_path = "data/document_encodings_chunks_150_non_processed.pickle"
+    # faiss_index_path = "data/index_chunks_150_non_processed.index"
+    faiss_index_path = "data/index_clinical_biobert_chunks_100_non_processed.index"
+    # "data/document_encodings_chunks_150_non_processed.pickle"
+    document_encodings_path = "data/clinical_biobert_document_encodings_chunks_100_non_processed.pickle"
     chunk_150_unstemmed_path = "data/chunks_150_non_processed.pickle"
     chunk_100_unstemmed_path = "data/chunks_100_non_processed.pickle"
 
@@ -59,7 +62,7 @@ class REALM_like_retriever(Retriever):
         self.q_encoder.to(self.device)
 
         # info about used chunks
-        self.used_chunks_size = 150
+        self.used_chunks_size = 100
 
     def get_info(self):
         info = {}

@@ -6,11 +6,13 @@ from transformers import AutoTokenizer
 
 
 class Base_BERT_Reader(Reader):
-    bert_name = "microsoft/BiomedNLP-PubMedBERT-base-uncased-abstract"
+    # bert_name = "microsoft/BiomedNLP-PubMedBERT-base-uncased-abstract"
+    bert_name = "emilyalsentzer/Bio_ClinicalBERT"
     
     # change if necessary
     weights_file_directory = "src/trainer/results"
-    weights_file_name = "2021-04-30_16:08:19 reader IRES retriever BERT_linear.pth"
+    # weights_file_name = "2021-04-30_16:08:19 reader IRES retriever BERT_linear.pth"
+    weights_file_name = ""
     weights_file_path = f"{weights_file_directory}/{weights_file_name}"
     layers_to_not_freeze = ['9', '10', '11', 'linear', 'pooler']  
 
