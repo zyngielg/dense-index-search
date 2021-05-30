@@ -22,7 +22,7 @@ def parse_arguments():
     parser.add_argument(
         'retriever', help="Choose retriever to be used. Possible options: IR-ES, REALM-like")
     parser.add_argument(
-        'reader', help="Choose reader to be used. Possible options: Base-BERT")
+        'reader', help="Choose reader to be used. Possible options: Base-BERT, BERT-for-multiple-choice")
     return parser.parse_args()
 
 
@@ -44,7 +44,7 @@ if __name__ == "__main__":
     retriever_reader_factory = ReaderRetrieverFactory(
         retriever_choice=args.retriever, reader_choice=args.reader)
     retriever = retriever_reader_factory.create_retriever()
-    retriever.prepare_retriever(corpus=None, create_encodings=True, create_index=True)
+    retriever.prepare_retriever(corpus=medqa_corpus, create_chunks=False, create_encodings=False, create_index=False)
     reader = retriever_reader_factory.create_reader()
 
     if args.mode == "QA":
