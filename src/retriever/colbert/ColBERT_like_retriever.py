@@ -25,7 +25,7 @@ class ColBERT_like_retriever(Retriever):
     faiss_index_path = "data/vespa-engine-colbert-medium_index_chunks_150_non_processed.index"
     document_encodings_path = "data/vespa-engine-colbert-medium_document_encodings_chunks_150_non_processed.pickle"
     chunk_150_unstemmed_path = "data/chunks_150_non_processed.pickle"
-    chunk_100_unstemmed_path = "data/chunks_100_non_processed.pickle"
+    chunk_100_unstemmed_path = "data/clinical_biobert_document_encodings_chunks_100_non_processed.pickle"
 
     def __init__(self, load_weights=False, load_index=False) -> None:
         super().__init__()
@@ -38,7 +38,8 @@ class ColBERT_like_retriever(Retriever):
         # defining tokenizer and encoders
         self.colbert =  ColBERT.from_pretrained(self.bert_name,
                                                 query_maxlen=512,
-                                                doc_maxlen=512)
+                                                doc_maxlen=512,
+                                                device=self.device)
         self.tokenizer = ColbertTokenizer(bert_name=self.bert_name,
                                            query_maxlen=self.colbert.query_maxlen,
                                            doc_maxlen=self.colbert.query_maxlen)
@@ -103,69 +104,69 @@ class ColBERT_like_retriever(Retriever):
                     f"Layer {name} not frozen (status: {param.requires_grad})")
 
     def prepare_retriever(self, corpus: MedQACorpus = None, create_encodings=True, create_index=True):
-        if self.load_index is False:
-            if corpus is None:
-                if self.used_chunks_size == 100:
-                    chunks_path = self.chunk_100_unstemmed_path
-                elif self.used_chunks_size == 150:
-                    chunks_path = self.chunk_150_unstemmed_path
-                print(f"Loading the corpus chunks of size {self.used_chunks_size} from {chunks_path}")
-                self.corpus_chunks = load_pickle(chunks_path)
-            else:
-                self.corpus_chunks = self.__create_corpus_chunks(
-                    corpus=corpus.corpus, chunk_length=self.used_chunks_size)
-                save_pickle(self.corpus_chunks, self.chunk_150_unstemmed_path)
+        if corpus is None:
+            if self.used_chunks_size == 100:
+                chunks_path = self.chunk_100_unstemmed_path
+            elif self.used_chunks_size == 150:
+                chunks_path = self.chunk_150_unstemmed_path
+            print(f"Loading the corpus chunks of size {self.used_chunks_size} from {chunks_path}")
+            self.corpus_chunks = load_pickle(chunks_path)
+        else:
+            self.corpus_chunks = self.__create_corpus_chunks(
+                corpus=corpus.corpus, chunk_length=self.used_chunks_size)
+            save_pickle(self.corpus_chunks, self.chunk_150_unstemmed_path)
 
-            num_docs = len(self.corpus_chunks)
-            dimension = 512
+        num_docs = len(self.corpus_chunks)
+        dimension = 768
 
-            if create_encodings:
-                print("******** 0a. Creating the chunks' input ids and attention masks ... ********")
-                chunks_input_ids, chunks_attention_masks = self.tokenizer.tensorize_documents(self.corpus_chunks)
-                print("******** ... completed ********")
-                print("******** 1a. Creating the chunks' encodings ... ********")
-                chunks_encodings = np.empty(
-                    (num_docs, dimension)).astype('float32')
-                for i in tqdm(range(len(chunks_input_ids))):
-                    input_ids = chunks_input_ids[i]
-                    attention_mask = chunks_attention_masks[i]
-                    
-                    encoding = self.colbert.doc(
-                        input_ids.to(self.device), attention_mask.to(self.device))
-                    chunks_encodings[i] = encoding
+        if create_encodings:
+            print("******** 0a. Creating the chunks' input ids and attention masks ... ********")
+            chunks_input_ids, chunks_attention_masks = self.tokenizer.tensorize_documents(self.corpus_chunks)
+            print("******** ... completed ********")
+            print("******** 1a. Creating the chunks' encodings ... ********")
+            chunks_encodings = np.empty(
+                (num_docs, dimension)).astype('float32')
+            for i in tqdm(range(len(chunks_input_ids))):
+                input_ids = chunks_input_ids[i]
+                attention_mask = chunks_attention_masks[i]
+                with torch.no_grad():
+                    encoding = self.colbert.doc(input_ids.to(self.device), 
+                                                attention_mask.to(self.device))
+                    encoding = encoding.cpu()
+                chunks_encodings[i] = encoding
 
-                print("********     ... chunks' encodings created ********")
+            print("********     ... chunks' encodings created ********")
+                        
+            print("******** 1b. Saving chunk encodingx to file ... ********")
+            save_pickle(chunks_encodings,
+                        file_path=self.document_encodings_path)
+            print("********     ... encodings saved *********")
+        else:
+            print("******** 1. Loading chunk encodings ... ********")
+            chunks_encodings = load_pickle(self.document_encodings_path)
+            print("********    ... encodings loaded ********")
 
-                print("******** 1b. Saving chunk encodingx to file ... ********")
-                save_pickle(chunks_encodings,
-                            file_path=self.document_encodings_path)
-                print("********     ... encodings saved *********")
-            else:
-                print("******** 1. Loading chunk encodings ... ********")
-                chunks_encodings = load_pickle(self.document_encodings_path)
-                print("********    ... encodings loaded ********")
+        if create_index:
+            print("******** 2a. Creating and populating faiss index ...  *****")
+            # build a flat (CPU) index
+            index = faiss.IndexFlatIP(dimension)
+            if self.device.type != 'cpu':
+                res = faiss.StandardGpuResources()  # use a single GPU
+                index = faiss.index_cpu_to_gpu(res, 0, index)
+            index.train(chunks_encodings)
+            index.add(chunks_encodings)
+            self.index = index
+            print("********      ... index created and populated ********")
 
-            if create_index:
-                print("******** 2a. Creating and populating faiss index ...  *****")
-                # build a flat (CPU) index
-                index = faiss.IndexFlatIP(dimension)
-                if self.device.type != 'cpu':
-                    res = faiss.StandardGpuResources()  # use a single GPU
-                    index = faiss.index_cpu_to_gpu(res, 0, index)
-                index.train(chunks_encodings)
-                index.add(chunks_encodings)
-                self.index = index
-                print("********      ... index created and populated ********")
-
-                print("******** 2b. Saving the index ... ********")
-                if self.device.type != 'cpu':
-                    index = faiss.index_gpu_to_cpu(index)
-                faiss.write_index(index, self.faiss_index_path)
-                print("********     ... index saved ********")
-            else:
-                print("******** 2. Loading faiss index ...  *****")
-                self.index = faiss.read_index(self.faiss_index_path)
-                print("********    ... index loaded ********")
+            print("******** 2b. Saving the index ... ********")
+            if self.device.type != 'cpu':
+                index = faiss.index_gpu_to_cpu(index)
+            faiss.write_index(index, self.faiss_index_path)
+            print("********     ... index saved ********")
+        else:
+            print("******** 2. Loading faiss index ...  *****")
+            self.index = faiss.read_index(self.faiss_index_path)
+            print("********    ... index loaded ********")
 
         print("*** Finished Preparing the REALM-like retriever ***")
 

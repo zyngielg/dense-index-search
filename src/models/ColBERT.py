@@ -9,7 +9,7 @@ class ColBERT(BertPreTrainedModel):
     DEVICE = 'cpu'
     # note: ColBERT was using dim=128, but the checkpoint from huggingface requires 32
 
-    def __init__(self, config, query_maxlen, doc_maxlen, device='cpu', mask_punctuation=True, dim=32, similarity_metric='cosine'):
+    def __init__(self, config, query_maxlen, doc_maxlen, device='cpu', mask_punctuation=True, dim=128, similarity_metric='cosine'):
 
         super(ColBERT, self).__init__(config)
         self.DEVICE = device
@@ -72,6 +72,3 @@ class ColBERT(BertPreTrainedModel):
         mask = [[(x not in self.skiplist) and (x != 0) for x in d]
                 for d in input_ids.cpu().tolist()]
         return mask
-
-
-x = ColBERT.from_pretrained("vespa-engine/colbert-medium", query_maxlen = 200, doc_maxlen=200)
