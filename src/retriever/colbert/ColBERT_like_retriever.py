@@ -22,10 +22,10 @@ class ColBERT_like_retriever(Retriever):
     
     stemmer = SnowballStemmer(language='english')
 
-    faiss_index_path = "data/vespa-engine-colbert-medium_index_chunks_150_non_processed.index"
-    document_encodings_path = "data/vespa-engine-colbert-medium_document_encodings_chunks_150_non_processed.pickle"
+    faiss_index_path = "data/index_colbert_l2_clinical_bert_chunks_100_non_processed.index"
+    document_encodings_path = "data/document_encodings_colbert_l2_clinical_bert_chunks_100_non_processed.pickle"
     chunk_150_unstemmed_path = "data/chunks_150_non_processed.pickle"
-    chunk_100_unstemmed_path = "data/clinical_biobert_document_encodings_chunks_100_non_processed.pickle"
+    chunk_100_unstemmed_path = "data/chunks_100_non_processed.pickle"
 
     def __init__(self, load_weights=False, load_index=False) -> None:
         super().__init__()
