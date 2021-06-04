@@ -3,6 +3,7 @@ import torch
 import numpy as np
 import faiss
 import json
+import math
 from data.medqa_corpus import MedQACorpus
 from retriever.retriever import Retriever
 from transformers import AutoTokenizer, AutoModel
@@ -12,16 +13,19 @@ from tqdm import tqdm
 from utils.pickle_utils import save_pickle, load_pickle
 from models.ColBERT import ColBERT
 from retriever.colbert.ColBERT_tokenizer import ColbertTokenizer
+
+
 class ColBERT_like_retriever(Retriever):
-    
-    bert_name = "vespa-engine/colbert-medium"
+
+    bert_name = "emilyalsentzer/Bio_ClinicalBERT"
     # change to specify the weights file
     q_encoder_weights_path = ""
     num_documents = 5
     layers_to_not_freeze = ['9', '10', '11', 'pooler']
-    
+
     stemmer = SnowballStemmer(language='english')
 
+    bert_weights_path = "data/colbert-clinical-biobert-cosine-200000.dnn"
     faiss_index_path = "data/index_colbert_l2_clinical_bert_chunks_100_non_processed.index"
     document_encodings_path = "data/document_encodings_colbert_l2_clinical_bert_chunks_100_non_processed.pickle"
     chunk_150_unstemmed_path = "data/chunks_150_non_processed.pickle"
@@ -36,13 +40,14 @@ class ColBERT_like_retriever(Retriever):
         print("Using {} device".format(self.device))
 
         # defining tokenizer and encoders
-        self.colbert =  ColBERT.from_pretrained(self.bert_name,
-                                                query_maxlen=512,
-                                                doc_maxlen=512,
-                                                device=self.device)
+        self.colbert = ColBERT.from_pretrained(self.bert_name,
+                                               query_maxlen=512,
+                                               doc_maxlen=512,
+                                               device=self.device,
+                                               dim=128)
         self.tokenizer = ColbertTokenizer(bert_name=self.bert_name,
-                                           query_maxlen=self.colbert.query_maxlen,
-                                           doc_maxlen=self.colbert.query_maxlen)
+                                          query_maxlen=self.colbert.query_maxlen,
+                                          doc_maxlen=self.colbert.query_maxlen)
 
         if torch.cuda.device_count() > 1:
             print(f"Using {torch.cuda.device_count()} GPUs")
@@ -50,8 +55,7 @@ class ColBERT_like_retriever(Retriever):
 
         # loading weights
         if load_weights:
-            self.colbert.load_state_dict(
-                torch.load(self.colbert_weights_path))
+            ColBERT.load_checkpoint(self.bert_weights_path, self.colbert)
 
         # loading index
         if load_index:
@@ -59,10 +63,10 @@ class ColBERT_like_retriever(Retriever):
 
         # freezing layers
         self.freeze_layers()
-        self.colbert.to(self.device)
+        # self.colbert.to(self.device)
 
         # info about used chunks
-        self.used_chunks_size = 150
+        self.used_chunks_size = 100
 
     def get_info(self):
         info = {}
@@ -104,58 +108,124 @@ class ColBERT_like_retriever(Retriever):
                     f"Layer {name} not frozen (status: {param.requires_grad})")
 
     def prepare_retriever(self, corpus: MedQACorpus = None, create_encodings=True, create_index=True):
+        if self.used_chunks_size == 100:
+            chunks_path = self.chunk_100_unstemmed_path
+        elif self.used_chunks_size == 150:
+            chunks_path = self.chunk_150_unstemmed_path
+
         if corpus is None:
-            if self.used_chunks_size == 100:
-                chunks_path = self.chunk_100_unstemmed_path
-            elif self.used_chunks_size == 150:
-                chunks_path = self.chunk_150_unstemmed_path
-            print(f"Loading the corpus chunks of size {self.used_chunks_size} from {chunks_path}")
+            print(
+                f"Loading the corpus chunks of size {self.used_chunks_size} from {chunks_path}")
             self.corpus_chunks = load_pickle(chunks_path)
         else:
             self.corpus_chunks = self.__create_corpus_chunks(
                 corpus=corpus.corpus, chunk_length=self.used_chunks_size)
-            save_pickle(self.corpus_chunks, self.chunk_150_unstemmed_path)
+            save_pickle(self.corpus_chunks, chunks_path)
 
-        num_docs = len(self.corpus_chunks)
-        dimension = 768
+        dimension = self.colbert.module.dim  # NOT 768
 
         if create_encodings:
-            print("******** 0a. Creating the chunks' input ids and attention masks ... ********")
-            chunks_input_ids, chunks_attention_masks = self.tokenizer.tensorize_documents(self.corpus_chunks)
-            print("******** ... completed ********")
-            print("******** 1a. Creating the chunks' encodings ... ********")
-            chunks_encodings = np.empty(
-                (num_docs, dimension)).astype('float32')
-            for i in tqdm(range(len(chunks_input_ids))):
-                input_ids = chunks_input_ids[i]
-                attention_mask = chunks_attention_masks[i]
-                with torch.no_grad():
-                    encoding = self.colbert.doc(input_ids.to(self.device), 
-                                                attention_mask.to(self.device))
-                    encoding = encoding.cpu()
-                chunks_encodings[i] = encoding
+            encodings = []
+            for idx, chunk in enumerate(tqdm(self.corpus_chunks)):
+                content = chunk['content']
 
-            print("********     ... chunks' encodings created ********")
-                        
+                ids, mask = self.tokenizer.tensorize_documents([content])
+                test = self.tokenizer.doc_tokenizer.decode(ids[0])
+                with torch.no_grad():
+                    encoding = self.colbert.module.doc(ids, mask)[0]
+                encodings.append(encoding)
+
+            encodings = torch.cat(encodings)
+            assert dimension == encodings.shape[-1]
+
+            chunks_encodings = encodings.float().numpy()
+
             print("******** 1b. Saving chunk encodingx to file ... ********")
             save_pickle(chunks_encodings,
                         file_path=self.document_encodings_path)
             print("********     ... encodings saved *********")
+
         else:
             print("******** 1. Loading chunk encodings ... ********")
             chunks_encodings = load_pickle(self.document_encodings_path)
             print("********    ... encodings loaded ********")
+        #     documents = [x['content'] for x in self.corpus_chunks]
+        #     print(
+        #         "******** 0a. Creating the chunks' input ids and attention masks ... ********")
+        #     batch_size = 32
+        #     batches, reverse_indices = self.tokenizer.tensorize_documents(documents, bsize=batch_size)
+        #     print("******** ... completed ********")
+
+        #     print("******** 1a. Creating the chunks' encodings ... ********")
+        #     chunks_encodings_list = []
+        #     for input_ids, attention_mask in tqdm(batches):
+        #         with torch.no_grad():
+        #             encoding = self.colbert.module.doc(input_ids, attention_mask)
+        #             D = [d for batch in encoding for d in batch]
+        #             # D = [D[idx] for idx in reverse_indices.tolist()]
+        #         chunks_encodings_list.append(encoding)
+
+        #     D = [d for batch in chunks_encodings_list for d in batch]
+        #     # D = [D[idx] for idx in reverse_indices.tolist()]
+        #     x = "and now what"
+        #     D = torch.cat(D)
+        #     torch.save(D, self.document_encodings_path)
+
+        #     y = torch.load(self.document_encodings_path)
+        #     print(type(y))
+        #     print(y == D)
+        #     quit()
+        #     print("********     ... chunks' encodings created ********")
+
+        # if create_encodings:
+        #     documents = [x['content'] for x in self.corpus_chunks]
+        #     print(
+        #         "******** 0a. Creating the chunks' input ids and attention masks ... ********")
+        #     chunks_input_ids, chunks_attention_masks = self.tokenizer.tensorize_documents(documents[:10])
+        #     print("******** ... completed ********")
+        #     print("******** 1a. Creating the chunks' encodings ... ********")
+        #     chunks_encodings = np.empty(
+        #         (num_docs, dimension)).astype('float32')
+
+        #     chunks_encodings_list = []
+        #     for i in tqdm(range(10)): #tqdm(range(len(chunks_input_ids))):
+        #         input_ids = chunks_input_ids[i].unsqueeze(0)
+        #         attention_mask = chunks_attention_masks[i].unsqueeze(0)
+        #         with torch.no_grad():
+        #             encoding = self.colbert.module.doc(input_ids, attention_mask)
+        #             encoding = encoding.cpu()
+        #             print(encoding.shape)
+        #         # chunks_encodings[i] = encoding
+        #         # print(chunks_encodings[i])
+        #         chunks_encodings_list.append(encoding)
+        #         print(chunks_encodings_list)
+        #     chunks_encodings = torch.cat(chunks_encodings)
+        #     print("********     ... chunks' encodings created ********")
+
+            # print("******** 1b. Saving chunk encodingx to file ... ********")
+            # save_pickle(chunks_encodings,
+            #             file_path=self.document_encodings_path)
+            # print("********     ... encodings saved *********")
+        
 
         if create_index:
             print("******** 2a. Creating and populating faiss index ...  *****")
             # build a flat (CPU) index
+            num_embeddings = chunks_encodings.shape[0]
+            partitions = 1 << math.ceil(math.log2(8 * math.sqrt(num_embeddings)))
             index = faiss.IndexFlatIP(dimension)
             if self.device.type != 'cpu':
+                # index = faiss.index_cpu_to_all_gpus(index)
                 res = faiss.StandardGpuResources()  # use a single GPU
-                index = faiss.index_cpu_to_gpu(res, 0, index)
-            index.train(chunks_encodings)
+                index = faiss.index_cpu_to_gpu(res, 1, index)
+            # index.train(chunks_encodings)
+            # index.add(chunks_encodings)
+            # self.index = index
+
             index.add(chunks_encodings)
+
             self.index = index
+
             print("********      ... index created and populated ********")
 
             print("******** 2b. Saving the index ... ********")

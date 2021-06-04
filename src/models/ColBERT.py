@@ -3,7 +3,7 @@ import torch
 import torch.nn as nn
 
 from transformers import BertPreTrainedModel, BertModel, BertTokenizerFast
-
+from collections import OrderedDict
 
 class ColBERT(BertPreTrainedModel):
     DEVICE = 'cpu'
@@ -27,8 +27,8 @@ class ColBERT(BertPreTrainedModel):
                              for symbol in string.punctuation
                              for w in [symbol, self.tokenizer.encode(symbol, add_special_tokens=False)[0]]}
 
-        self.bert = BertModel(config)
-        self.linear = nn.Linear(config.hidden_size, dim, bias=False)
+        self.bert = BertModel.from_pretrained(config._name_or_path).to(self.DEVICE)
+        self.linear = nn.Linear(config.hidden_size, dim, bias=False).to(self.DEVICE)
 
         self.init_weights()
 
@@ -43,10 +43,10 @@ class ColBERT(BertPreTrainedModel):
 
         return torch.nn.functional.normalize(Q, p=2, dim=2)
 
-    def doc(self, input_ids, attention_mask, keep_dims=True):
+    def doc(self, input_ids, attention_mask, keep_dims=False):
         input_ids, attention_mask = input_ids.to(
             self.DEVICE), attention_mask.to(self.DEVICE)
-        D = self.bert(input_ids, attention_mask=attention_mask)[0]
+        D = self.bert(input_ids=input_ids, attention_mask=attention_mask)[0]
         D = self.linear(D)
 
         mask = torch.tensor(self.mask(input_ids),
@@ -72,3 +72,25 @@ class ColBERT(BertPreTrainedModel):
         mask = [[(x not in self.skiplist) and (x != 0) for x in d]
                 for d in input_ids.cpu().tolist()]
         return mask
+
+    @staticmethod
+    def load_checkpoint(path, model):
+        print(f"******** Loading checkpoint from {path} ********")
+
+        checkpoint = torch.load(path, map_location='cpu')
+
+        state_dict = checkpoint['model_state_dict']
+        new_state_dict = OrderedDict()
+        for k, v in state_dict.items():
+            name = k
+            if k[:7] == 'module.':
+                name = k[7:]
+            new_state_dict[name] = v
+
+        checkpoint['model_state_dict'] = new_state_dict
+
+        try:
+            model.load_state_dict(checkpoint['model_state_dict'])
+        except:
+            print("[WARNING] Loading checkpoint with strict=False")
+            model.load_state_dict(checkpoint['model_state_dict'], strict=False)

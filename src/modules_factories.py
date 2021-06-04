@@ -1,4 +1,5 @@
 from data.medqa_questions import MedQAQuestions
+from retriever.colbert.ColBERT_like_retriever import ColBERT_like_retriever
 from retriever.retriever import Retriever
 from retriever.ir_es import IR_ES
 from retriever.REALM_like_retriever import REALM_like_retriever
@@ -23,6 +24,8 @@ class ReaderRetrieverFactory():
             retriever = IR_ES(from_es_session=self.from_es_session)
         elif self.retriever_choice == "REALM-like":
             retriever = REALM_like_retriever(load_weights=self.load_weights)
+        elif self.retriever_choice == "ColBERT":
+            retriever = ColBERT_like_retriever(load_weights=True, load_index=True)
 
         if retriever is None:
             print("Retriever has not been initialized. Check input arguments")
@@ -63,6 +66,8 @@ class TrainerFactory():
         elif type(self.retriever) == REALM_like_retriever and type(self.reader) == Base_BERT_Reader:
             trainer = REALM_like_retriever_base_BERT_reader_trainer(
                 self.questions, self.retriever, self.reader, self.num_epochs, self.batch_size, self.lr)
+        elif type(self.retriever) == REALM_like_retriever and type(self.reader) == Base_BERT_Reader:
+            pass
 
         if trainer is None:
             print("Trainer has not been initialized. Check input arguments")
