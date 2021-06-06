@@ -99,9 +99,9 @@ class ColbertTokenizer():
 
     def tensorize_queries(self, queries):
         # add placehold for the [Q] marker
-        batch_text = ['. ' + x for x in batch_text]
+        batch_text = ['. ' + x for x in queries]
 
-        obj = self.tok(batch_text, padding='max_length', truncation=True,
+        obj = self.query_tokenizer(batch_text, padding='max_length', truncation=True,
                        return_tensors='pt', max_length=self.query_maxlen)
 
         ids, mask = obj['input_ids'], obj['attention_mask']

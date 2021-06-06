@@ -102,9 +102,9 @@ class REALM_like_retriever(Retriever):
         for name, param in self.q_encoder.named_parameters():
             if not any(x in name for x in self.q_encoder_layers_to_not_freeze):
                 param.requires_grad = False
-            else:
-                print(
-                    f"Layer {name} not frozen (status: {param.requires_grad})")
+            # else:
+            #     print(
+            #         f"Layer {name} not frozen (status: {param.requires_grad})")
 
     def prepare_retriever(self, corpus: MedQACorpus = None, create_encodings=True, create_index=True):
         if self.load_index is False:

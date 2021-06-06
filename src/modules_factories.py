@@ -5,10 +5,11 @@ from retriever.ir_es import IR_ES
 from retriever.REALM_like_retriever import REALM_like_retriever
 from reader.reader import Reader
 from reader.base_bert_reader import Base_BERT_Reader
+# from trainer.ColBERT_retriever_Base_BERT_reader_trainer import ColBERT_retriever_Base_BERT_reader_trainer
 from trainer.trainer import Trainer
 from trainer.REALM_like_retriever_base_BERT_reader_trainer import REALM_like_retriever_base_BERT_reader_trainer
 from trainer.ir_es_base_bert_trainer import IrEsBaseBertTrainer
-
+from trainer.ColBERT_retriever_Base_BERT_reader_trainer import ColBERT_retriever_Base_BERT_reader_trainer
 
 class ReaderRetrieverFactory():
     def __init__(self, retriever_choice, reader_choice, from_es_session=False, load_weights=False) -> None:
@@ -25,13 +26,14 @@ class ReaderRetrieverFactory():
         elif self.retriever_choice == "REALM-like":
             retriever = REALM_like_retriever(load_weights=self.load_weights)
         elif self.retriever_choice == "ColBERT":
-            retriever = ColBERT_like_retriever(load_weights=True, load_index=True)
+            retriever = ColBERT_like_retriever(load_weights=True)
 
         if retriever is None:
             print("Retriever has not been initialized. Check input arguments")
             quit()
         else:
-            print(f"*** Initialized retriever {retriever.__class__.__name__} ***")
+            print(
+                f"*** Initialized retriever {retriever.__class__.__name__} ***")
             return retriever
 
     def create_reader(self, load_weights=False) -> Reader:
@@ -66,8 +68,9 @@ class TrainerFactory():
         elif type(self.retriever) == REALM_like_retriever and type(self.reader) == Base_BERT_Reader:
             trainer = REALM_like_retriever_base_BERT_reader_trainer(
                 self.questions, self.retriever, self.reader, self.num_epochs, self.batch_size, self.lr)
-        elif type(self.retriever) == REALM_like_retriever and type(self.reader) == Base_BERT_Reader:
-            pass
+        elif type(self.retriever) == ColBERT_like_retriever and type(self.reader) == Base_BERT_Reader:
+            trainer = ColBERT_retriever_Base_BERT_reader_trainer(
+                self.questions, self.retriever, self.reader, self.num_epochs, self.batch_size, self.lr)
 
         if trainer is None:
             print("Trainer has not been initialized. Check input arguments")
