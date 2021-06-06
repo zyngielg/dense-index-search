@@ -173,43 +173,42 @@ class ColBERT_like_retriever(Retriever):
             doc_embeddings = load_pickle(self.document_embeddings_path)
             self.embbedding2doc_id = load_pickle(self.embbedding2doc_id_path)
             print("********    ... embeddings and matrix loaded ********")
+        # if create_index:
+        #     print("******** 2a. Creating and populating faiss index ...  *****")
+        #     # num_embeddings = doc_embeddings.shape[0]
+        #     # partitions = 1 << math.ceil(
+        #     #     math.log2(8 * math.sqrt(num_embeddings)))
 
-        if create_index:
-            print("******** 2a. Creating and populating faiss index ...  *****")
-            # num_embeddings = doc_embeddings.shape[0]
-            # partitions = 1 << math.ceil(
-            #     math.log2(8 * math.sqrt(num_embeddings)))
+        #     # build a flat (CPU) index
+        #     index = faiss.IndexFlatIP(dimension)
+        #     if self.device.type != 'cpu':
+        #         # index = faiss.index_cpu_to_all_gpus(index)
+        #         res = faiss.StandardGpuResources()  # use a single GPU
+        #         index = faiss.index_cpu_to_gpu(res, 1, index)
+        #     # index.train(chunks_encodings)
+        #     # index.add(chunks_encodings)
+        #     # self.index = index
 
-            # build a flat (CPU) index
-            index = faiss.IndexFlatIP(dimension)
-            if self.device.type != 'cpu':
-                # index = faiss.index_cpu_to_all_gpus(index)
-                res = faiss.StandardGpuResources()  # use a single GPU
-                index = faiss.index_cpu_to_gpu(res, 1, index)
-            # index.train(chunks_encodings)
-            # index.add(chunks_encodings)
-            # self.index = index
+        #     index.add(doc_embeddings)
 
-            index.add(doc_embeddings)
+        #     self.index = index
 
-            self.index = index
+        #     print("********      ... index created and populated ********")
 
-            print("********      ... index created and populated ********")
-
-            print("******** 2b. Saving the index ... ********")
-            if self.device.type != 'cpu':
-                index = faiss.index_gpu_to_cpu(index)
-            faiss.write_index(index, self.faiss_index_path)
-            print("********     ... index saved ********")
-        else:
-            print("******** 2. Loading faiss index ...  ********")
-            index = faiss.read_index(self.faiss_index_path)
-            res = faiss.StandardGpuResources()  # use a single GPU
-            self.index = faiss.index_cpu_to_gpu(res, 1, index)
+        #     print("******** 2b. Saving the index ... ********")
+        #     if self.device.type != 'cpu':
+        #         index = faiss.index_gpu_to_cpu(index)
+        #     faiss.write_index(index, self.faiss_index_path)
+        #     print("********     ... index saved ********")
+        # else:
+        #     print("******** 2. Loading faiss index ...  ********")
+        #     index = faiss.read_index(self.faiss_index_path)
+        #     res = faiss.StandardGpuResources()  # use a single GPU
+        #     self.index = faiss.index_cpu_to_gpu(res, 1, index)
 
             
 
-            print("********    ... index loaded ********")
+        #     print("********    ... index loaded ********")
 
         print("******** 3. Creatin  ********")
 

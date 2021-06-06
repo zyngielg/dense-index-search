@@ -55,19 +55,16 @@ def create_questions_data_loader(questions, tokenizer, batch_size):
     questions_text = [x['question'] for x in questions.values()]
     answers = [x['answer'] for x in questions.values()]
     answers_idx = [ord(x['answer_idx']) - 65 for x in questions.values()]
-    options = [list(x['options'].values()) for x in questions.values()]
+    options = ['#'.join(list(x['options'].values())) for x in questions.values()]
+    
     metamap_phrases = [x['metamap_phrases'] for x in questions.values()]
-
-    questions_text_max_len = len(max(questions_text, key=len))
-    answers_max_len = len(max(answers, key=len))
     metamap_phrases_max_len = len(max(metamap_phrases, key=len))
-    # TODO: metamap_phrases issue needs to be resolved
-
+    metamap_phrases = [
+        x + [''] * (metamap_phrases_max_len - len(x)) for x in metamap_phrases]
+    metamap_phrases = ['#'.join(x) for x in metamap_phrases]
     # questions_text = [x + ' ' * (questions_text_max_len - len(x))
     #                   for x in questions_text]
     # answers = [x + ' ' * (answers_max_len - len(x)) for x in answers]
-    metamap_phrases = [
-        x + [''] * (metamap_phrases_max_len - len(x)) for x in metamap_phrases]
 
     dataset = QuestionsDataset(questions=questions_text, answers=answers,
                                answers_idx=answers_idx, options=options, metamap_phrases=metamap_phrases)
