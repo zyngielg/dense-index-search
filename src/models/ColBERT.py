@@ -43,7 +43,7 @@ class ColBERT(BertPreTrainedModel):
 
         return torch.nn.functional.normalize(Q, p=2, dim=2)
 
-    def doc(self, input_ids, attention_mask, keep_dims=False):
+    def doc(self, input_ids, attention_mask, keep_dims=True):
         input_ids, attention_mask = input_ids.to(
             self.DEVICE), attention_mask.to(self.DEVICE)
         D = self.bert(input_ids=input_ids, attention_mask=attention_mask)[0]

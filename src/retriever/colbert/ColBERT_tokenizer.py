@@ -43,19 +43,19 @@ class ColbertTokenizer():
         ids = [prefix + lst + suffix for lst in ids]
 
         return ids
-    def tensorize_single_document(self, document):
-        # add placehold for the [D] marker
-        document = '. ' + document
+    # def tensorize_single_document(self, document):
+    #     # add placehold for the [D] marker
+    #     document = '. ' + document
 
-        obj = self.doc_tokenizer(document, padding='longest', truncation='longest_first',
-                                 return_tensors='pt', max_length=self.doc_maxlen)
+    #     obj = self.doc_tokenizer(document, padding='longest', truncation='longest_first',
+    #                              return_tensors='pt', max_length=self.doc_maxlen)
 
-        ids, mask = obj['input_ids'], obj['attention_mask']
+    #     ids, mask = obj['input_ids'], obj['attention_mask']
 
-        # postprocess for the [D] marker
-        ids[:, 1] = self.D_marker_token_id
+    #     # postprocess for the [D] marker
+    #     ids[:, 1] = self.D_marker_token_id
 
-        return ids, mask
+    #     return ids, mask
 
     def tensorize_documents(self, documents, bsize=None):
         # add placehold for the [D] marker
