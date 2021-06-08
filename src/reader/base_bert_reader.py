@@ -44,8 +44,8 @@ class Base_BERT_Reader(Reader):
         for name, param in self.model.named_parameters():
             if not any(x in name for x in self.layers_to_not_freeze):
                 param.requires_grad = False
-            else:
-                print(f"Layer {name} not frozen (status: {param.requires_grad})")
+            # else:
+            #     print(f"Layer {name} not frozen (status: {param.requires_grad})")
                 
     def get_info(self):
         info = {}

@@ -7,15 +7,14 @@ import torch
 
 from data.data_loader import create_questions_data_loader
 from data.medqa_questions import MedQAQuestions
-from reader.reader import Reader
-from retriever.REALM_like_retriever import REALM_like_retriever
+from reader.base_bert_reader import Base_BERT_Reader
+from retriever.colbert.ColBERT_like_retriever import ColBERT_like_retriever
 from trainer.trainer import Trainer
 from transformers import get_linear_schedule_with_warmup
 from utils.general_utils import remove_duplicates_preserve_order
 
-
-class REALM_like_retriever_base_BERT_reader_trainer(Trainer):
-    def __init__(self, questions: MedQAQuestions, retriever: REALM_like_retriever, reader: Reader, num_epochs: int, batch_size: int, lr: float) -> None:
+class ColBERT_retriever_Base_BERT_reader_trainer(Trainer):
+    def __init__(self, questions: MedQAQuestions, retriever: ColBERT_like_retriever, reader: Base_BERT_Reader, num_epochs: int, batch_size: int, lr: float) -> None:
         super().__init__(questions, retriever, reader, num_epochs, batch_size, lr)
 
     def pepare_data_loader(self):
@@ -30,6 +29,8 @@ class REALM_like_retriever_base_BERT_reader_trainer(Trainer):
         print("******** Val dataloader created  ********")
 
         return train_dataloader, val_dataloader
+        # return  val_dataloader, val_dataloader
+
 
     def train(self):
         super().train()
@@ -45,13 +46,13 @@ class REALM_like_retriever_base_BERT_reader_trainer(Trainer):
         training_info = {
             "retriever": self.retriever.get_info(),
             "reader": self.reader.get_info(),
-            "tokenizer": self.retriever.tokenizer_type,
+            # "tokenizer": self.retriever.tokenizer_type,
             "total_training_time": None,
             "training_stats": []
         }
 
         criterion = torch.nn.CrossEntropyLoss()
-        params = list(self.retriever.q_encoder.parameters()) + \
+        params = list(self.retriever.colbert.parameters()) + \
             list(self.reader.model.parameters())
         optimizer = torch.optim.AdamW(params, lr=self.lr)
 
@@ -66,7 +67,7 @@ class REALM_like_retriever_base_BERT_reader_trainer(Trainer):
             print(f'======== Epoch {epoch + 1} / {self.num_epochs} ========')
             t0 = time.time()
             total_train_loss = 0
-            self.retriever.q_encoder.train()
+            self.retriever.colbert.train()
             self.reader.model.train()
             for step, batch in enumerate(train_dataloader):
                 if step % 25 == 0 and not step == 0:
@@ -79,7 +80,6 @@ class REALM_like_retriever_base_BERT_reader_trainer(Trainer):
                 # self.retriever.q_encoder.zero_grad()
 
                 questions = batch[0]
-                answers = batch[1]
                 answers_indexes = batch[2]
                 options = [x.split('#') for x in batch[3]]
                 metamap_phrases = [x.split('#') for x in batch[4]]
@@ -91,21 +91,18 @@ class REALM_like_retriever_base_BERT_reader_trainer(Trainer):
                 for q_idx in range(len(questions)):
                     metamap_phrases[q_idx] = remove_duplicates_preserve_order(metamap_phrases[q_idx])
                     query = ' '.join(metamap_phrases[q_idx])
-                    # or
-                    # query = questions[q_idx]
-                    query_options = [query + ' ' + x for x in options[q_idx]]
-                    retrieved_documents = [
-                        self.retriever.retrieve_documents(x) for x in query_options]
-
+                    query_options = [x + ' ' + query for x in options[q_idx]]
+                    retrieved_documents, scores = self.retriever.retrieve_documents(query_options)
+                        
                     contexts = []
                     for idx in range(len(retrieved_documents)):
                         option_documents = []
-                        for document in retrieved_documents[idx]:
-                            option_documents.append(document['content'])
+                        for document_content in retrieved_documents[idx]:
+                            option_documents.append(document_content)
                         contexts.append(' '.join(option_documents))
 
-                    question_inputs = self.retriever.tokenizer(
-                        query_options, contexts, add_special_tokens=True, max_length=512, padding='max_length', truncation=True, return_tensors="pt")
+                    question_inputs = self.retriever.tokenizer.query_tokenizer(
+                        query_options, contexts, add_special_tokens=True, max_length=300, padding='max_length', truncation=True, return_tensors="pt")
                     input_ids.append(question_inputs['input_ids'])
                     token_type_ids.append(question_inputs['token_type_ids'])
                     attention_masks.append(question_inputs['attention_mask'])
@@ -169,21 +166,21 @@ class REALM_like_retriever_base_BERT_reader_trainer(Trainer):
                         f'Batch {step} of {len(train_dataloader)}. Elapsed: {elapsed}')
                 questions = batch[0]
                 answers_indexes = batch[2]
-                options = [x.split('#') for x in batch[3]]
-                metamap_phrases = [x.split('#') for x in batch[4]]
+                options = batch[3]
+                metamap_phrases = batch[4]
 
                 input_ids = []
                 token_type_ids = []
                 attention_masks = []
 
                 for q_idx in range(len(questions)):
-                    metamap_phrases[q_idx] = remove_duplicates_preserve_order(metamap_phrases[q_idx])
                     query = ' '.join(metamap_phrases[q_idx])
                     # or
                     # query = questions[q_idx]
-                    query_options = [query + ' ' + x for x in options[q_idx]]
-                    retrieved_documents = [
-                        self.retriever.retrieve_documents(x) for x in query_options]
+                    query_options = [x + ' ' + query for x in options[q_idx]]
+                    # retrieved_documents = [
+                    #     self.retriever.retrieve_documents(x) for x in query_options]
+                    retrieved_documents, scores = self.retriever.retrieve_documents(query_options)
 
                     contexts = []
                     for idx in range(len(retrieved_documents)):
@@ -220,6 +217,8 @@ class REALM_like_retriever_base_BERT_reader_trainer(Trainer):
                 total_eval_accuracy += self.calculate_accuracy(
                     output, answers_indexes)
 
+                break
+
             # Report the final accuracy for this validation run.
             avg_val_accuracy = total_eval_accuracy / len(val_dataloader)
             print("  Accuracy: {0:.4f}".format(avg_val_accuracy))
@@ -245,7 +244,8 @@ class REALM_like_retriever_base_BERT_reader_trainer(Trainer):
                 }
             )
 
-        print("")
+            print(f"Num of issues: {self.retriever.score_calc.issue_counter}")
+
         print("Training complete!")
 
         total_training_time = self.format_time(time.time()-total_t0)

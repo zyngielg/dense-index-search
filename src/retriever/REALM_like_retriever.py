@@ -25,7 +25,7 @@ class REALM_like_retriever(Retriever):
     # faiss_index_path = "data/index_chunks_150_non_processed.index"
     faiss_index_path = "data/index_clinical_biobert_chunks_100_non_processed.index"
     # "data/document_encodings_chunks_150_non_processed.pickle"
-    document_encodings_path = "data/clinical_biobert_document_encodings_chunks_100_non_processed.pickle"
+    document_encodings_path = "data/document_embeddings_realm_clinical_bert_chunks_100_nonprocessed.pickle"
     chunk_150_unstemmed_path = "data/chunks_150_non_processed.pickle"
     chunk_100_unstemmed_path = "data/chunks_100_non_processed.pickle"
 
@@ -102,9 +102,9 @@ class REALM_like_retriever(Retriever):
         for name, param in self.q_encoder.named_parameters():
             if not any(x in name for x in self.q_encoder_layers_to_not_freeze):
                 param.requires_grad = False
-            else:
-                print(
-                    f"Layer {name} not frozen (status: {param.requires_grad})")
+            # else:
+            #     print(
+            #         f"Layer {name} not frozen (status: {param.requires_grad})")
 
     def prepare_retriever(self, corpus: MedQACorpus = None, create_encodings=True, create_index=True):
         if self.load_index is False:
@@ -135,8 +135,9 @@ class REALM_like_retriever(Retriever):
                                                        padding='max_length',
                                                        truncation=True,
                                                        return_tensors="pt")
-                    encoding = self.d_encoder(
-                        **content_tokenized.to(self.device))
+                    with torch.no_grad():
+                        encoding = self.d_encoder(
+                            **content_tokenized.to(self.device))
                     encoding = encoding.pooler_output.flatten().cpu().detach()
                     chunks_encodings[idx] = encoding
 
@@ -163,11 +164,11 @@ class REALM_like_retriever(Retriever):
                 self.index = index
                 print("********      ... index created and populated ********")
 
-                print("******** 2b. Saving the index ... ********")
-                if self.device.type != 'cpu':
-                    index = faiss.index_gpu_to_cpu(index)
-                faiss.write_index(index, self.faiss_index_path)
-                print("********     ... index saved ********")
+                # print("******** 2b. Saving the index ... ********")
+                # if self.device.type != 'cpu':
+                #     index = faiss.index_gpu_to_cpu(index)
+                # faiss.write_index(index, self.faiss_index_path)
+                # print("********     ... index saved ********")
             else:
                 print("******** 2. Loading faiss index ...  *****")
                 self.index = faiss.read_index(self.faiss_index_path)
