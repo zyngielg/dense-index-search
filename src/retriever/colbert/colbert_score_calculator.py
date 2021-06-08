@@ -82,7 +82,7 @@ class ColBERTScoreCalculator():
             mask = mask.unsqueeze(0) <= group_doclens.to(DEVICE).unsqueeze(-1)
             
             scores = (D @ group_Q) * mask.unsqueeze(-1)
-            scores = scores.max(1).values.sum(-1).cpu()
+            scores = scores.max(1).values.sum(-1)# .cpu()
 
             output_pids.append(group_pids)
             output_scores.append(scores)
@@ -90,7 +90,7 @@ class ColBERTScoreCalculator():
 
         output_permutation = torch.cat(output_permutation).sort().indices
         output_pids = torch.cat(output_pids)[output_permutation].tolist()
-        output_scores = torch.cat(output_scores)[output_permutation].tolist()
+        output_scores = torch.cat(output_scores)[output_permutation] #.tolist()
 
         assert len(raw_pids) == len(output_pids)
         assert len(raw_pids) == len(output_scores)

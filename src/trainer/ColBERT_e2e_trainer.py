@@ -7,36 +7,36 @@ import torch
 
 from data.data_loader import create_questions_data_loader
 from data.medqa_questions import MedQAQuestions
-from reader.base_bert_reader import Base_BERT_Reader
 from retriever.colbert.ColBERT_retriever import ColBERT_retriever
 from trainer.trainer import Trainer
 from transformers import get_linear_schedule_with_warmup
 from utils.general_utils import remove_duplicates_preserve_order
 
-class ColBERT_retriever_Base_BERT_reader_trainer(Trainer):
-    def __init__(self, questions: MedQAQuestions, retriever: ColBERT_retriever, reader: Base_BERT_Reader, num_epochs: int, batch_size: int, lr: float) -> None:
-        super().__init__(questions, retriever, reader, num_epochs, batch_size, lr)
+class ColBERT_e2e_trainer(Trainer):
+    def __init__(self, questions: MedQAQuestions, retriever: ColBERT_retriever, num_epochs: int, batch_size: int, lr: float) -> None:
+        super().__init__(questions, retriever, None, num_epochs, batch_size, lr)
+        self.batch_size = 4
 
     def pepare_data_loader(self):
-        print("******** Creating train dataloader ********")
-        train_dataloader = create_questions_data_loader(
-            questions=self.questions_train, tokenizer=self.retriever.tokenizer, batch_size=self.batch_size)
-        print("******** Train dataloader created  ********")
+        # print("******** Creating train dataloader ********")
+        # train_dataloader = create_questions_data_loader(
+        #     questions=self.questions_train, tokenizer=self.retriever.tokenizer, batch_size=self.batch_size)
+        # print("******** Train dataloader created  ********")
 
         print("******** Creating val dataloader ********")
         val_dataloader = create_questions_data_loader(
             questions=self.questions_val, tokenizer=self.retriever.tokenizer, batch_size=self.batch_size)
         print("******** Val dataloader created  ********")
 
-        return train_dataloader, val_dataloader
-        # return  val_dataloader, val_dataloader
+        # return train_dataloader, val_dataloader
+        return  val_dataloader, val_dataloader
 
 
     def train(self):
         super().train()
         total_t0 = time.time()
 
-        device = self.reader.device
+        device = self.retriever.device
         seed_val = 42
         random.seed(seed_val)
         np.random.seed(seed_val)
@@ -45,16 +45,13 @@ class ColBERT_retriever_Base_BERT_reader_trainer(Trainer):
 
         training_info = {
             "retriever": self.retriever.get_info(),
-            "reader": self.reader.get_info(),
-            # "tokenizer": self.retriever.tokenizer_type,
+            "reader": "None - ColBERT e2e",
             "total_training_time": None,
             "training_stats": []
         }
 
         criterion = torch.nn.CrossEntropyLoss()
-        params = list(self.retriever.colbert.parameters()) + \
-            list(self.reader.model.parameters())
-        optimizer = torch.optim.AdamW(params, lr=self.lr)
+        optimizer = torch.optim.AdamW(self.retriever.colbert.parameters(), lr=self.lr)
 
         total_steps = self.num_epochs * self.batch_size
         scheduler = get_linear_schedule_with_warmup(optimizer,
@@ -68,69 +65,70 @@ class ColBERT_retriever_Base_BERT_reader_trainer(Trainer):
             t0 = time.time()
             total_train_loss = 0
             self.retriever.colbert.train()
-            self.reader.model.train()
             for step, batch in enumerate(train_dataloader):
-                if step % 25 == 0 and not step == 0:
+                if step % 10 == 0 and not step == 0:
                     elapsed = self.format_time(time.time() - t0)
                     print(
                         f'Batch {step} of {len(train_dataloader)}. Elapsed: {elapsed}')
 
-                optimizer.zero_grad()
-                # self.reader.model.zero_grad()
-                # self.retriever.q_encoder.zero_grad()
-
+                self.retriever.colbert.zero_grad()
                 questions = batch[0]
                 answers_indexes = batch[2]
-                options = [x.split('#') for x in batch[3]]
+                options = [x.lower().split('#') for x in batch[3]]
                 metamap_phrases = [x.split('#') for x in batch[4]]
 
-                input_ids = []
-                token_type_ids = []
-                attention_masks = []
-
+                results = []
                 for q_idx in range(len(questions)):
+                    
+                    ### BEGINNING OF DOCUMENT RETRIEVAL ###
                     metamap_phrases[q_idx] = remove_duplicates_preserve_order(metamap_phrases[q_idx])
                     query = ' '.join(metamap_phrases[q_idx])
                     query_options = [x + ' ' + query for x in options[q_idx]]
+
                     retrieved_documents, scores = self.retriever.retrieve_documents(query_options)
-                        
-                    contexts = []
-                    for idx in range(len(retrieved_documents)):
-                        option_documents = []
-                        for document_content in retrieved_documents[idx]:
-                            option_documents.append(document_content)
-                        contexts.append(' '.join(option_documents))
+                    ### END OF DOCUMENT RETRIEVAL ###
 
-                    question_inputs = self.retriever.tokenizer.query_tokenizer(
-                        query_options, contexts, add_special_tokens=True, max_length=300, padding='max_length', truncation=True, return_tensors="pt")
-                    input_ids.append(question_inputs['input_ids'])
-                    token_type_ids.append(question_inputs['token_type_ids'])
-                    attention_masks.append(question_inputs['attention_mask'])
 
-                tensor_input_ids = torch.stack(input_ids, dim=0)
-                tensor_token_type_ids = torch.stack(token_type_ids, dim=0)
-                tensor_attention_masks = torch.stack(attention_masks, dim=0)
+                    ### BEGINNING OF RECALCULATING RETRIEVED DOCUMENTS SCORES
+                    num_docs_retrieved = self.retriever.num_documents_reader
+                    q_ids, q_mask = self.retriever.tokenizer.tensorize_queries(query_options)
 
-                output = self.reader.model(
-                    input_ids=tensor_input_ids.to(device), attention_mask=tensor_token_type_ids.to(device), token_type_ids=tensor_attention_masks.to(device))
+                    retrieved_documents_reshaped = []
+                    
+                    for i in range(len(retrieved_documents[0])):
+                        for j in range(len(retrieved_documents)):
+                            retrieved_documents_reshaped.append(retrieved_documents[j][i])
 
-                loss = criterion(output, answers_indexes.to(device))
+                    # test_retrieved_documents = [item for sublist in retrieved_documents for item in sublist]
+                    d_ids, d_mask = self.retriever.tokenizer.tensorize_documents(retrieved_documents_reshaped)
+                    d_ids, d_mask = d_ids.view(num_docs_retrieved, len(query_options), -1), d_mask.view(num_docs_retrieved, len(query_options), -1)
+                    
+                    d_ids_stacked = [d_ids[i] for i in range(num_docs_retrieved)]
+                    d_mask_stacked = [d_mask[i] for i in range(num_docs_retrieved)]
+
+                    q_ids_stacked = [q_ids for i in range(num_docs_retrieved)]
+                    q_mask_stacked = [q_mask for i in range(num_docs_retrieved)]
+                                
+                    Q = (torch.cat(q_ids_stacked), torch.cat(q_mask_stacked))
+                    D = (torch.cat(d_ids_stacked), torch.cat(d_mask_stacked))
+
+                    test = self.retriever.colbert(Q, D).view(num_docs_retrieved, -1).permute(1, 0)
+                    test_mean = torch.mean(test, dim=1).unsqueeze(0)
+                    results.append(test_mean)
+
+
+                results = torch.cat(results)
+                loss = criterion(results, answers_indexes.to(device))                
                 if self.num_gpus > 1:
                     loss = loss.mean()
                 total_train_loss += loss.item()
                 loss.backward()
-                # Clip the norm of the gradients to 1.0.
-                # This is to help prevent the "exploding gradients" problem.
-                # torch.nn.utils.clip_grad_norm_(
-                #     self.reader.model.parameters(), 1.0)
 
-                # Update parameters and take a step using the computed gradient.
-                # The optimizer dictates the "update rule"--how the parameters are
-                # modified based on their gradients, the learning rate, etc.
+                torch.nn.utils.clip_grad_norm_(self.retriever.colbert.parameters(), 1.0)
+
                 optimizer.step()
-
-                # Update the learning rate.
                 scheduler.step()
+                
 
             # Calculate the average loss over all of the batches.
             avg_train_loss = total_train_loss / len(train_dataloader)

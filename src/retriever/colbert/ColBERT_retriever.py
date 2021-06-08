@@ -17,13 +17,13 @@ from utils.general_utils import torch_percentile, uniq, remove_duplicates_preser
 from operator import itemgetter
 
 
-class ColBERT_like_retriever(Retriever):
+class ColBERT_retriever(Retriever):
 
     bert_name = "emilyalsentzer/Bio_ClinicalBERT"
     # change to specify the weights file
     q_encoder_weights_path = ""
     num_documents_faiss = 1500
-    num_documents_reader = 5
+    num_documents_reader = 10
     layers_to_not_freeze = ['9', '10', '11', 'pooler']
 
     stemmer = SnowballStemmer(language='english')
@@ -56,9 +56,9 @@ class ColBERT_like_retriever(Retriever):
                                           query_maxlen=self.colbert.query_maxlen,
                                           doc_maxlen=self.colbert.query_maxlen)
 
-        if torch.cuda.device_count() > 1:
-            print(f"Using {torch.cuda.device_count()} GPUs")
-            self.colbert = torch.nn.DataParallel(self.colbert)
+        # if torch.cuda.device_count() > 1:
+        #     print(f"Using {torch.cuda.device_count()} GPUs")
+        #     self.colbert = torch.nn.DataParallel(self.colbert, device_ids=[2,3])
 
         # loading weights
         if load_weights:
@@ -96,14 +96,18 @@ class ColBERT_like_retriever(Retriever):
         all_retrieved_docs, all_scores = [], []
         for query in queries:
             input_ids, mask = self.tokenizer.tensorize_queries([query])
-            Q = self.colbert.module.query(input_ids, mask)
+            # Q = self.colbert.module.query(input_ids, mask)
+            Q = self.colbert.query(input_ids, mask)
 
+
+            # 150000 
             # queries_to_embedding_ids
             num_queries, embeddings_per_query, dim = Q.size()
             Q_faiss = Q.view(num_queries * embeddings_per_query,
                              dim).cpu().detach().float().numpy()
             # Error: 'k <= (Index::idx_t) getMaxKSelection()' failed: GPU index only supports k <= 2048 (requested 10000)
-            _, embeddings_ids = self.index.search(Q_faiss, self.num_documents_faiss)
+            _, embeddings_ids = self.index.search(
+                Q_faiss, self.num_documents_faiss)
             embeddings_ids = torch.from_numpy(embeddings_ids)
 
             embeddings_ids = embeddings_ids.view(
@@ -113,18 +117,21 @@ class ColBERT_like_retriever(Retriever):
             doc_ids = list(map(uniq, doc_ids))[0]
 
             # rank
-            Q = Q.permute(0, 2, 1).contiguous().to(dtype=torch.float32)#.to(self.device).to(dtype=torch.float32)
-            # preprocessing shit
+            # .to(self.device).to(dtype=torch.float32)
+            Q = Q.permute(0, 2, 1).contiguous().to(dtype=torch.float32)
+            # preprocessing
             scores = self.score_calc.calculate_scores(Q, doc_ids)
             scores_sorted = torch.tensor(scores).sort(descending=True)
             doc_ids, scores = torch.tensor(
-                doc_ids)[scores_sorted.indices].tolist(), scores_sorted.values.tolist()
+                doc_ids)[scores_sorted.indices].tolist(), scores_sorted.values#.tolist()
 
             # documents extraction
-            documents = [x['content'] for x in self.corpus_chunks]
+
             retrieved_documents = []
+
+            # TODO: HERE I LOSE GRADIENTS
             for id in doc_ids[:self.num_documents_reader]:
-                retrieved_documents.append(documents[id])
+                retrieved_documents.append(self.documents[id])
             all_retrieved_docs.append(retrieved_documents)
             all_scores.append(scores[:self.num_documents_reader])
         return all_retrieved_docs, all_scores
@@ -159,7 +166,9 @@ class ColBERT_like_retriever(Retriever):
             save_pickle(self.corpus_chunks, chunks_path)
             print("********    ... chunks saved ********")
 
-        dimension = self.colbert.module.dim  # NOT 768
+        self.documents = [x['content'] for x in self.corpus_chunks]
+        # dimension = self.colbert.module.dim  # NOT 768
+        dimension = self.colbert.dim
 
         if create_encodings:
             print("******** 1a. Creating document embeddings ... ********")
@@ -170,7 +179,7 @@ class ColBERT_like_retriever(Retriever):
                 ids, mask = self.tokenizer.tensorize_documents([content])
                 # test = self.tokenizer.doc_tokenizer.decode(ids[0])
                 with torch.no_grad():
-                    embedding = self.colbert.module.doc(ids, mask)[0]
+                    embedding = self.colbert.module.doc(ids, mask, keep_dims=False)[0]
                 embeddings.append(embedding)
 
             self.doc_embeddings_lengths = [d.size(0) for d in embeddings]
@@ -199,7 +208,6 @@ class ColBERT_like_retriever(Retriever):
             save_pickle(self.doc_embeddings, self.document_embeddings_path)
             save_pickle(self.embbedding2doc_id, self.embbedding2doc_id_path)
             print("********     ... embeddings and matrix saved *********")
-
         else:
             print(
                 "******** 1. Loading document embeddings and embedding2doc_id matrix... ********")
@@ -212,6 +220,7 @@ class ColBERT_like_retriever(Retriever):
             self.embbedding2doc_id = load_pickle(self.embbedding2doc_id_path)
             # doc_embeddings = load_pickle(self.document_embeddings_path)
             print("********    ... embeddings and matrix loaded ********")
+        
         if create_index:
             print("******** 2a. Creating and populating faiss index ...  *****")
             # num_embeddings = doc_embeddings.shape[0]
@@ -221,15 +230,16 @@ class ColBERT_like_retriever(Retriever):
             # build a flat (CPU) index
             quantizer = faiss.IndexFlatIP(dimension)
             num_partitions = 1000
-            index = faiss.IndexIVFPQ(quantizer, dimension, num_partitions, 16, 8)
+            index = faiss.IndexIVFPQ(
+                quantizer, dimension, num_partitions, 16, 8)
             if self.device.type != 'cpu':
                 # index = faiss.index_cpu_to_all_gpus(index)
                 res = faiss.StandardGpuResources()  # use a single GPU
                 index = faiss.index_cpu_to_gpu(res, 3, index)
 
             # index.train(sample)
-            
-            index.train(sample)            
+
+            index.train(sample)
             index.add(self.doc_embeddings)
             print("training C")
             self.index = index
