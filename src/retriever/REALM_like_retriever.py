@@ -20,7 +20,7 @@ class REALM_like_retriever(Retriever):
     # change to specify the weights file
     q_encoder_weights_path = ""
     num_documents = 5
-    q_encoder_layers_to_not_freeze = ['9', '10', '11', 'pooler']
+    q_encoder_layers_to_not_freeze = ['8', '9', '10', '11', 'pooler']
 
     # faiss_index_path = "data/index_chunks_150_non_processed.index"
     faiss_index_path = "data/index_clinical_biobert_chunks_100_non_processed.index"
@@ -106,70 +106,69 @@ class REALM_like_retriever(Retriever):
             #     print(
             #         f"Layer {name} not frozen (status: {param.requires_grad})")
 
-    def prepare_retriever(self, corpus: MedQACorpus = None, create_encodings=True, create_index=True):
-        if self.load_index is False:
-            if corpus is None:
-                if self.used_chunks_size == 100:
-                    chunks_path = self.chunk_100_unstemmed_path
-                elif self.used_chunks_size == 150:
-                    chunks_path = self.chunk_150_unstemmed_path
-                print(f"Loading the corpus from {chunks_path}")
-                self.corpus_chunks = load_pickle(chunks_path)
-            else:
-                self.corpus_chunks = self.__create_corpus_chunks(
-                    corpus=corpus.corpus, chunk_length=self.used_chunks_size)
-                save_pickle(self.corpus_chunks, self.chunk_150_unstemmed_path)
+    def prepare_retriever(self, corpus: MedQACorpus = None, create_chunks=True, create_encodings=True, create_index=True):
+        if self.used_chunks_size == 100:
+            chunks_path = self.chunk_100_unstemmed_path
+        elif self.used_chunks_size == 150:
+            chunks_path = self.chunk_150_unstemmed_path
+            
+        if create_chunks:
+            self.corpus_chunks = self.__create_corpus_chunks(
+                corpus=corpus.corpus, chunk_length=self.used_chunks_size)
+            save_pickle(self.corpus_chunks, chunks_path)
+        else:
+            print(f"Loading the corpus from {chunks_path}")
+            self.corpus_chunks = load_pickle(chunks_path)
 
-            num_docs = len(self.corpus_chunks)
-            dimension = 768
+        num_docs = len(self.corpus_chunks)
+        dimension = 768
 
-            if create_encodings:
-                print("******** 1a. Creating the chunks' encodings ... ********")
-                chunks_encodings = np.empty(
-                    (num_docs, dimension)).astype('float32')
-                for idx, chunk in enumerate(tqdm(self.corpus_chunks)):
-                    content = chunk['content']
-                    content_tokenized = self.tokenizer(content,
-                                                       add_special_tokens=True,
-                                                       max_length=512,
-                                                       padding='max_length',
-                                                       truncation=True,
-                                                       return_tensors="pt")
-                    with torch.no_grad():
-                        encoding = self.d_encoder(
-                            **content_tokenized.to(self.device))
-                    encoding = encoding.pooler_output.flatten().cpu().detach()
-                    chunks_encodings[idx] = encoding
+        if create_encodings:
+            print("******** 1a. Creating the chunks' encodings ... ********")
+            chunks_encodings = np.empty(
+                (num_docs, dimension)).astype('float32')
+            for idx, chunk in enumerate(tqdm(self.corpus_chunks)):
+                content = chunk['content']
+                content_tokenized = self.tokenizer(content,
+                                                    add_special_tokens=True,
+                                                    max_length=512,
+                                                    padding='max_length',
+                                                    truncation=True,
+                                                    return_tensors="pt")
+                encoding = self.d_encoder(
+                    **content_tokenized.to(self.device))
+                encoding = encoding.pooler_output.flatten().cpu().detach()
+                chunks_encodings[idx] = encoding
 
-                print("********     ... chunks' encodings created ********")
+            print("********     ... chunks' encodings created ********")
 
-                print("******** 1b. Saving chunk encodingx to file ... ********")
-                save_pickle(chunks_encodings,
-                            file_path=self.document_encodings_path)
-                print("********     ... encodings saved *********")
-            else:
-                print("******** 1. Loading chunk encodings ... ********")
-                chunks_encodings = load_pickle(self.document_encodings_path)
-                print("********    ... encodings loaded ********")
+            print("******** 1b. Saving chunk encodingx to file ... ********")
+            save_pickle(chunks_encodings,
+                        file_path=self.document_encodings_path)
+            print("********     ... encodings saved *********")
+        else:
+            print("******** 1. Loading chunk encodings ... ********")
+            chunks_encodings = load_pickle(self.document_encodings_path)
+            print("********    ... encodings loaded ********")
 
-            if create_index:
-                print("******** 2a. Creating and populating faiss index ...  *****")
-                # build a flat (CPU) index
-                index = faiss.IndexFlatIP(dimension)
-                if self.device.type != 'cpu':
-                    res = faiss.StandardGpuResources()  # use a single GPU
-                    index = faiss.index_cpu_to_gpu(res, 0, index)
-                index.train(chunks_encodings)
-                index.add(chunks_encodings)
-                self.index = index
-                print("********      ... index created and populated ********")
+        if create_index:
+            print("******** 2a. Creating and populating faiss index ...  *****")
+            # build a flat (CPU) index
+            index = faiss.IndexFlatIP(dimension)
+            if self.device.type != 'cpu':
+                res = faiss.StandardGpuResources()  # use a single GPU
+                index = faiss.index_cpu_to_gpu(res, 0, index)
+            index.train(chunks_encodings)
+            index.add(chunks_encodings)
+            self.index = index
+            print("********      ... index created and populated ********")
 
-                # print("******** 2b. Saving the index ... ********")
-                # if self.device.type != 'cpu':
-                #     index = faiss.index_gpu_to_cpu(index)
-                # faiss.write_index(index, self.faiss_index_path)
-                # print("********     ... index saved ********")
-            else:
+            print("******** 2b. Saving the index ... ********")
+            if self.device.type != 'cpu':
+                index = faiss.index_gpu_to_cpu(index)
+            faiss.write_index(index, self.faiss_index_path)
+            print("********     ... index saved ********")
+        else:
                 print("******** 2. Loading faiss index ...  *****")
                 self.index = faiss.read_index(self.faiss_index_path)
                 print("********    ... index loaded ********")
