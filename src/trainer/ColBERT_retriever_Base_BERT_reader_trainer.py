@@ -151,7 +151,7 @@ class ColBERT_retriever_Base_BERT_reader_trainer(Trainer):
 
             # Put the model in evaluation mode--the dropout layers behave differently
             # during evaluation.
-            self.retriever.q_encoder.eval()
+            self.retriever.colbert.eval()
             self.reader.model.eval()
 
             # Tracking variables
