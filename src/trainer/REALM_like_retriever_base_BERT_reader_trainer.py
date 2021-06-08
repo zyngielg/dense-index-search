@@ -11,6 +11,7 @@ from reader.reader import Reader
 from retriever.REALM_like_retriever import REALM_like_retriever
 from trainer.trainer import Trainer
 from transformers import get_linear_schedule_with_warmup
+from utils.general_utils import remove_duplicates_preserve_order
 
 
 class REALM_like_retriever_base_BERT_reader_trainer(Trainer):
@@ -80,18 +81,19 @@ class REALM_like_retriever_base_BERT_reader_trainer(Trainer):
                 questions = batch[0]
                 answers = batch[1]
                 answers_indexes = batch[2]
-                options = batch[3]
-                metamap_phrases = batch[4]
+                options = [x.split('#') for x in batch[3]]
+                metamap_phrases = [x.split('#') for x in batch[4]]
 
                 input_ids = []
                 token_type_ids = []
                 attention_masks = []
 
                 for q_idx in range(len(questions)):
+                    metamap_phrases[q_idx] = remove_duplicates_preserve_order(metamap_phrases[q_idx])
                     query = ' '.join(metamap_phrases[q_idx])
                     # or
                     # query = questions[q_idx]
-                    query_options = [query + ' ' + x[q_idx] for x in options]
+                    query_options = [query + ' ' + x for x in options[q_idx]]
                     retrieved_documents = [
                         self.retriever.retrieve_documents(x) for x in query_options]
 
@@ -167,18 +169,19 @@ class REALM_like_retriever_base_BERT_reader_trainer(Trainer):
                         f'Batch {step} of {len(train_dataloader)}. Elapsed: {elapsed}')
                 questions = batch[0]
                 answers_indexes = batch[2]
-                options = batch[3]
-                metamap_phrases = batch[4]
+                options = [x.split('#') for x in batch[3]]
+                metamap_phrases = [x.split('#') for x in batch[4]]
 
                 input_ids = []
                 token_type_ids = []
                 attention_masks = []
 
                 for q_idx in range(len(questions)):
+                    metamap_phrases[q_idx] = remove_duplicates_preserve_order(metamap_phrases[q_idx])
                     query = ' '.join(metamap_phrases[q_idx])
                     # or
                     # query = questions[q_idx]
-                    query_options = [query + ' ' + x[q_idx] for x in options]
+                    query_options = [query + ' ' + x for x in options[q_idx]]
                     retrieved_documents = [
                         self.retriever.retrieve_documents(x) for x in query_options]
 

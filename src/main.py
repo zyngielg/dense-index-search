@@ -44,7 +44,7 @@ if __name__ == "__main__":
     retriever_reader_factory = ReaderRetrieverFactory(
         retriever_choice=args.retriever, reader_choice=args.reader)
     retriever = retriever_reader_factory.create_retriever()
-    retriever.prepare_retriever(corpus=None, create_encodings=False, create_index=False)
+    retriever.prepare_retriever(corpus=None, create_encodings=True, create_index=True)
     reader = retriever_reader_factory.create_reader()
 
     if args.mode == "QA":

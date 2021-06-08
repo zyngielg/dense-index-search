@@ -6,7 +6,7 @@ from transformers import BertPreTrainedModel, BertModel, BertTokenizerFast
 from collections import OrderedDict
 
 class ColBERT(BertPreTrainedModel):
-    DEVICE = 'cpu'
+    DEVICE = 'cuda:3'
     # note: ColBERT was using dim=128, but the checkpoint from huggingface requires 32
 
     def __init__(self, config, query_maxlen, doc_maxlen, device='cpu', mask_punctuation=True, dim=128, similarity_metric='cosine'):
@@ -49,8 +49,10 @@ class ColBERT(BertPreTrainedModel):
         D = self.bert(input_ids=input_ids, attention_mask=attention_mask)[0]
         D = self.linear(D)
 
+        # filtering out the punctuation symbols
         mask = torch.tensor(self.mask(input_ids),
                             device=self.DEVICE).unsqueeze(2).float()
+        x = False in mask
         D = D * mask
 
         D = torch.nn.functional.normalize(D, p=2, dim=2)

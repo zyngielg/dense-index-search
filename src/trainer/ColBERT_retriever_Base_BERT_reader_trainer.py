@@ -18,18 +18,18 @@ class ColBERT_retriever_Base_BERT_reader_trainer(Trainer):
         super().__init__(questions, retriever, reader, num_epochs, batch_size, lr)
 
     def pepare_data_loader(self):
-        # print("******** Creating train dataloader ********")
-        # train_dataloader = create_questions_data_loader(
-        #     questions=self.questions_train, tokenizer=self.retriever.tokenizer, batch_size=self.batch_size)
-        # print("******** Train dataloader created  ********")
+        print("******** Creating train dataloader ********")
+        train_dataloader = create_questions_data_loader(
+            questions=self.questions_train, tokenizer=self.retriever.tokenizer, batch_size=self.batch_size)
+        print("******** Train dataloader created  ********")
 
         print("******** Creating val dataloader ********")
         val_dataloader = create_questions_data_loader(
             questions=self.questions_val, tokenizer=self.retriever.tokenizer, batch_size=self.batch_size)
         print("******** Val dataloader created  ********")
 
-        # return train_dataloader, val_dataloader
-        return  val_dataloader, val_dataloader
+        return train_dataloader, val_dataloader
+        # return  val_dataloader, val_dataloader
 
 
     def train(self):
@@ -80,7 +80,6 @@ class ColBERT_retriever_Base_BERT_reader_trainer(Trainer):
                 # self.retriever.q_encoder.zero_grad()
 
                 questions = batch[0]
-                answers = batch[1]
                 answers_indexes = batch[2]
                 options = [x.split('#') for x in batch[3]]
                 metamap_phrases = [x.split('#') for x in batch[4]]
@@ -90,25 +89,20 @@ class ColBERT_retriever_Base_BERT_reader_trainer(Trainer):
                 attention_masks = []
 
                 for q_idx in range(len(questions)):
-                    print(len(metamap_phrases[q_idx]))
                     metamap_phrases[q_idx] = remove_duplicates_preserve_order(metamap_phrases[q_idx])
-                    print(len(metamap_phrases[q_idx]))
-
                     query = ' '.join(metamap_phrases[q_idx])
-                    # or
-                    # query = questions[q_idx]
-                    query_options = [query + ' ' + x for x in options[q_idx]]
-                    retrieved_documents = self.retriever.retrieve_documents(query_options)
+                    query_options = [x + ' ' + query for x in options[q_idx]]
+                    retrieved_documents, scores = self.retriever.retrieve_documents(query_options)
                         
                     contexts = []
                     for idx in range(len(retrieved_documents)):
                         option_documents = []
-                        for document in retrieved_documents[idx]:
-                            option_documents.append(document['content'])
+                        for document_content in retrieved_documents[idx]:
+                            option_documents.append(document_content)
                         contexts.append(' '.join(option_documents))
 
                     question_inputs = self.retriever.tokenizer.query_tokenizer(
-                        query_options, contexts, add_special_tokens=True, max_length=512, padding='max_length', truncation=True, return_tensors="pt")
+                        query_options, contexts, add_special_tokens=True, max_length=300, padding='max_length', truncation=True, return_tensors="pt")
                     input_ids.append(question_inputs['input_ids'])
                     token_type_ids.append(question_inputs['token_type_ids'])
                     attention_masks.append(question_inputs['attention_mask'])
@@ -183,9 +177,10 @@ class ColBERT_retriever_Base_BERT_reader_trainer(Trainer):
                     query = ' '.join(metamap_phrases[q_idx])
                     # or
                     # query = questions[q_idx]
-                    query_options = [query + ' ' + x[q_idx] for x in options]
-                    retrieved_documents = [
-                        self.retriever.retrieve_documents(x) for x in query_options]
+                    query_options = [x + ' ' + query for x in options[q_idx]]
+                    # retrieved_documents = [
+                    #     self.retriever.retrieve_documents(x) for x in query_options]
+                    retrieved_documents, scores = self.retriever.retrieve_documents(query_options)
 
                     contexts = []
                     for idx in range(len(retrieved_documents)):
@@ -222,6 +217,8 @@ class ColBERT_retriever_Base_BERT_reader_trainer(Trainer):
                 total_eval_accuracy += self.calculate_accuracy(
                     output, answers_indexes)
 
+                break
+
             # Report the final accuracy for this validation run.
             avg_val_accuracy = total_eval_accuracy / len(val_dataloader)
             print("  Accuracy: {0:.4f}".format(avg_val_accuracy))
@@ -247,7 +244,8 @@ class ColBERT_retriever_Base_BERT_reader_trainer(Trainer):
                 }
             )
 
-        print("")
+            print(f"Num of issues: {self.retriever.score_calc.issue_counter}")
+
         print("Training complete!")
 
         total_training_time = self.format_time(time.time()-total_t0)
