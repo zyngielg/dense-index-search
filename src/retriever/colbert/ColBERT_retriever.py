@@ -22,9 +22,9 @@ class ColBERT_retriever(Retriever):
     bert_name = "emilyalsentzer/Bio_ClinicalBERT"
     # change to specify the weights file
     q_encoder_weights_path = ""
-    num_documents_faiss = 1500
+    num_documents_faiss = 1000
     num_documents_reader = 10
-    layers_to_not_freeze = ['9', '10', '11', 'pooler']
+    layers_to_not_freeze = ['8', '9', '10', '11', 'linear']
 
     stemmer = SnowballStemmer(language='english')
 
@@ -54,11 +54,11 @@ class ColBERT_retriever(Retriever):
                                                dim=128)
         self.tokenizer = ColbertTokenizer(bert_name=self.bert_name,
                                           query_maxlen=self.colbert.query_maxlen,
-                                          doc_maxlen=self.colbert.query_maxlen)
+                                          doc_maxlen=self.colbert.doc_maxlen)
 
         # if torch.cuda.device_count() > 1:
         #     print(f"Using {torch.cuda.device_count()} GPUs")
-        #     self.colbert = torch.nn.DataParallel(self.colbert, device_ids=[2,3])
+        #     self.colbert = torch.nn.DataParallel(self.colbert)
 
         # loading weights
         if load_weights:
@@ -70,7 +70,7 @@ class ColBERT_retriever(Retriever):
 
         # freezing layers
         self.freeze_layers()
-        # self.colbert.to(self.device)
+        self.colbert.to(self.device)
 
         # info about used chunks
         self.used_chunks_size = 100
@@ -173,16 +173,18 @@ class ColBERT_retriever(Retriever):
         if create_encodings:
             print("******** 1a. Creating document embeddings ... ********")
             embeddings = []
-            for idx, chunk in enumerate(tqdm(self.corpus_chunks)):
-                content = chunk['content']
+            self.doc_embeddings_lengths = []
+            batch_size = 100
+            for idx in tqdm(range(0, len(self.documents), batch_size)):
+                contents = self.documents[idx:idx+batch_size]
 
-                ids, mask = self.tokenizer.tensorize_documents([content])
+                ids, mask = self.tokenizer.tensorize_documents(contents)
                 # test = self.tokenizer.doc_tokenizer.decode(ids[0])
                 with torch.no_grad():
-                    embedding = self.colbert.module.doc(ids, mask, keep_dims=False)[0]
-                embeddings.append(embedding)
-
-            self.doc_embeddings_lengths = [d.size(0) for d in embeddings]
+                    batch_embeddings = self.colbert.module.doc(ids, mask, keep_dims=False)
+                self.doc_embeddings_lengths += [d.size(0) for d in batch_embeddings]
+                embeddings.append(torch.cat(batch_embeddings))
+            
             save_pickle(self.doc_embeddings_lengths,
                         self.doc_embeddings_lengths_path)
             self.embeddings_tensor = torch.cat(embeddings)
@@ -205,20 +207,17 @@ class ColBERT_retriever(Retriever):
                 "******** 1c. Saving document embeddings and embedding2doc_id to file ... ********")
             torch.save(self.embeddings_tensor,
                        self.document_embeddings_tensor_path)
-            save_pickle(self.doc_embeddings, self.document_embeddings_path)
             save_pickle(self.embbedding2doc_id, self.embbedding2doc_id_path)
             print("********     ... embeddings and matrix saved *********")
         else:
             print(
                 "******** 1. Loading document embeddings and embedding2doc_id matrix... ********")
-            # self.doc_embeddings = load_pickle(self.document_embeddings_path)
             self.embeddings_tensor = torch.load(
                 self.document_embeddings_tensor_path)
             self.doc_embeddings = self.embeddings_tensor.float().numpy()
             self.doc_embeddings_lengths = load_pickle(
                 self.doc_embeddings_lengths_path)
             self.embbedding2doc_id = load_pickle(self.embbedding2doc_id_path)
-            # doc_embeddings = load_pickle(self.document_embeddings_path)
             print("********    ... embeddings and matrix loaded ********")
         
         if create_index:
@@ -235,7 +234,7 @@ class ColBERT_retriever(Retriever):
             if self.device.type != 'cpu':
                 # index = faiss.index_cpu_to_all_gpus(index)
                 res = faiss.StandardGpuResources()  # use a single GPU
-                index = faiss.index_cpu_to_gpu(res, 3, index)
+                index = faiss.index_cpu_to_gpu(res, 1, index)
 
             # index.train(sample)
 
