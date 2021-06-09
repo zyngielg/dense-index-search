@@ -23,14 +23,14 @@ class ColBERTScoreCalculator():
             'cpu', 
             'cuda:0'})
     
-    def calculate_scores(self, Q, pids):
+    def calculate_scores(self, Q, pids, mode=2):
         assert len(pids) > 0
         assert Q.size(0) in [1, len(pids)]
 
         Q = Q.contiguous().to(self.device).to(dtype=self.maxsim_dtype)
         
         VIEWS_DEVICE = self.views[0].device
-        DEVICE = 'cuda:2'
+        DEVICE = self.device #f'cuda:{mode}'
         D_buffers = self.buffers[str(VIEWS_DEVICE)]
 
         raw_pids = pids if type(pids) is list else pids.tolist()
@@ -43,6 +43,8 @@ class ColBERTScoreCalculator():
         output_pids, output_scores, output_permutation = [], [], []
 
         for group_idx, stride in enumerate(self.strides):
+            inner_device_idx = 2 if group_idx % 2 == 0 else 3
+            inner_DEVICE = torch.device(f"cuda:{inner_device_idx}")
             locator = (assignments == group_idx)
 
             if locator.sum() < 1e-5:
@@ -50,7 +52,7 @@ class ColBERTScoreCalculator():
 
             group_pids, group_doclens, group_offsets = pids[locator], doclens[locator], offsets[locator]
             group_Q = Q if Q.size(0) == 1 else Q[locator]
-            group_Q = group_Q.to(DEVICE)
+            group_Q = group_Q.to(inner_DEVICE)
             group_offsets = group_offsets.to(VIEWS_DEVICE)
             group_offsets_uniq, group_offsets_expand = torch.unique_consecutive(group_offsets, return_inverse=True)
 
@@ -75,14 +77,14 @@ class ColBERTScoreCalculator():
                 group_offsets_uniq = torch.where(group_offsets_uniq > self.views[group_idx].shape[0], zeros, group_offsets_uniq)
                 D = torch.index_select(self.views[group_idx], 0, group_offsets_uniq, out=D_buffers[group_idx][:D_size])
             
-            D = D.to(DEVICE)
-            D = D[group_offsets_expand.to(DEVICE)].to(dtype=self.maxsim_dtype)
+            D = D.to(inner_DEVICE)
+            D = D[group_offsets_expand.to(inner_DEVICE)].to(dtype=self.maxsim_dtype)
 
-            mask = torch.arange(stride, device=DEVICE) + 1
-            mask = mask.unsqueeze(0) <= group_doclens.to(DEVICE).unsqueeze(-1)
+            mask = torch.arange(stride, device=inner_DEVICE) + 1
+            mask = mask.unsqueeze(0) <= group_doclens.to(inner_DEVICE).unsqueeze(-1)
             
             scores = (D @ group_Q) * mask.unsqueeze(-1)
-            scores = scores.max(1).values.sum(-1)# .cpu()
+            scores = scores.max(1).values.sum(-1).cpu()
 
             output_pids.append(group_pids)
             output_scores.append(scores)
@@ -90,7 +92,7 @@ class ColBERTScoreCalculator():
 
         output_permutation = torch.cat(output_permutation).sort().indices
         output_pids = torch.cat(output_pids)[output_permutation].tolist()
-        output_scores = torch.cat(output_scores)[output_permutation] #.tolist()
+        output_scores = torch.cat(output_scores)[output_permutation].tolist()
 
         assert len(raw_pids) == len(output_pids)
         assert len(raw_pids) == len(output_scores)
@@ -100,7 +102,7 @@ class ColBERTScoreCalculator():
 
     def __create_strides(self):
         # [25, 50, 75]
-        percentiles = [30, 60, 80]
+        percentiles = [25, 50, 75]
         strides = [torch_percentile(self.doclens, p) for p in percentiles]
         strides.append(self.doclens.max().item())
         strides = sorted(list(set(strides)))

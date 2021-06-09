@@ -4,15 +4,16 @@ import torch.nn as nn
 
 from transformers import BertPreTrainedModel, BertModel, BertTokenizerFast
 from collections import OrderedDict
+from models.colbert_parameters import DEVICE
 
 class ColBERT(BertPreTrainedModel):
-    DEVICE = 'cuda:3'
+    # DEVICE = 'cuda:3'
     # note: ColBERT was using dim=128, but the checkpoint from huggingface requires 32
 
     def __init__(self, config, query_maxlen, doc_maxlen, device='cpu', mask_punctuation=True, dim=128, similarity_metric='cosine'):
 
         super(ColBERT, self).__init__(config)
-        self.DEVICE = device
+        self.DEVICE = DEVICE
 
         self.query_maxlen = query_maxlen
         self.doc_maxlen = doc_maxlen
@@ -27,8 +28,8 @@ class ColBERT(BertPreTrainedModel):
                              for symbol in string.punctuation
                              for w in [symbol, self.tokenizer.encode(symbol, add_special_tokens=False)[0]]}
 
-        self.bert = BertModel.from_pretrained(config._name_or_path).to(self.DEVICE)
-        self.linear = nn.Linear(config.hidden_size, dim, bias=False).to(self.DEVICE)
+        self.bert = BertModel.from_pretrained(config._name_or_path)
+        self.linear = nn.Linear(config.hidden_size, dim, bias=False)
 
         self.init_weights()
 
@@ -44,31 +45,31 @@ class ColBERT(BertPreTrainedModel):
         return torch.nn.functional.normalize(Q, p=2, dim=2)
 
     def doc(self, input_ids, attention_mask, keep_dims=True):
-        input_ids, attention_mask = input_ids.to(
-            self.DEVICE), attention_mask.to(self.DEVICE)
-        D = self.bert(input_ids=input_ids, attention_mask=attention_mask)[0]
-        D = self.linear(D)
+        with torch.no_grad():
+            input_ids, attention_mask = input_ids.to(
+                self.DEVICE), attention_mask.to(self.DEVICE)
+            D = self.bert(input_ids=input_ids, attention_mask=attention_mask)[0]
+            D = self.linear(D)
 
-        # filtering out the punctuation symbols
-        mask = torch.tensor(self.mask(input_ids),
-                            device=self.DEVICE).unsqueeze(2).float()
-        x = False in mask
-        D = D * mask
+            # filtering out the punctuation symbols
+            mask = torch.tensor(self.mask(input_ids),
+                                device=self.DEVICE).unsqueeze(2).float()
+            D = D * mask
 
-        D = torch.nn.functional.normalize(D, p=2, dim=2)
+            D = torch.nn.functional.normalize(D, p=2, dim=2)
 
-        if not keep_dims:
-            D, mask = D.cpu().to(dtype=torch.float16), mask.cpu().bool().squeeze(-1)
-            D = [d[mask[idx]] for idx, d in enumerate(D)]
+            if not keep_dims:
+                D, mask = D.cpu().to(dtype=torch.float16), mask.cpu().bool().squeeze(-1)
+                D = [d[mask[idx]] for idx, d in enumerate(D)]
 
-        return D
+            return D
 
     def score(self, Q, D):
         if self.similarity_metric == 'cosine':
-            return (Q @ D.permute(0, 2, 1)).max(2).values.sum(1)
-
-        assert self.similarity_metric == 'l2'
-        return (-1.0 * ((Q.unsqueeze(2) - D.unsqueeze(1))**2).sum(-1)).max(-1).values.sum(-1)
+            x = (Q @ D.permute(0, 2, 1))
+            return x.max(2).values.sum(1)
+        else: # l2        
+            return (-1.0 * ((Q.unsqueeze(2) - D.unsqueeze(1))**2).sum(-1)).max(-1).values.sum(-1)
 
     def mask(self, input_ids):
         mask = [[(x not in self.skiplist) and (x != 0) for x in d]
@@ -93,6 +94,5 @@ class ColBERT(BertPreTrainedModel):
 
         try:
             model.load_state_dict(checkpoint['model_state_dict'])
-        except:
-            print("[WARNING] Loading checkpoint with strict=False")
+        except:            
             model.load_state_dict(checkpoint['model_state_dict'], strict=False)

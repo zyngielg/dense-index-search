@@ -16,20 +16,22 @@ class ColBERT_e2e_trainer(Trainer):
     def __init__(self, questions: MedQAQuestions, retriever: ColBERT_retriever, num_epochs: int, batch_size: int, lr: float) -> None:
         super().__init__(questions, retriever, None, num_epochs, batch_size, lr)
         self.batch_size = 4
+        self.num_train_questions = 2000
+        self.num_val_questions = 500
 
     def pepare_data_loader(self):
-        # print("******** Creating train dataloader ********")
-        # train_dataloader = create_questions_data_loader(
-        #     questions=self.questions_train, tokenizer=self.retriever.tokenizer, batch_size=self.batch_size)
-        # print("******** Train dataloader created  ********")
+        print("******** Creating train dataloader ********")
+        train_dataloader = create_questions_data_loader(
+            questions=self.questions_train, batch_size=self.batch_size, num_questions=self.num_train_questions)
+        print("******** Train dataloader created  ********")
 
         print("******** Creating val dataloader ********")
         val_dataloader = create_questions_data_loader(
-            questions=self.questions_val, tokenizer=self.retriever.tokenizer, batch_size=self.batch_size)
+            questions=self.questions_val, batch_size=self.batch_size, num_questions=self.num_val_questions)
         print("******** Val dataloader created  ********")
 
-        # return train_dataloader, val_dataloader
-        return  val_dataloader, val_dataloader
+        return train_dataloader, val_dataloader
+        # return  val_dataloader, val_dataloader
 
 
     def train(self):
@@ -47,6 +49,8 @@ class ColBERT_e2e_trainer(Trainer):
             "retriever": self.retriever.get_info(),
             "reader": "None - ColBERT e2e",
             "total_training_time": None,
+            "num_train_questions": self.num_train_questions,
+            "num_val_questions": self.num_val_questions,
             "training_stats": []
         }
 
@@ -59,7 +63,6 @@ class ColBERT_e2e_trainer(Trainer):
                                                     num_training_steps=total_steps)
 
         train_dataloader, val_dataloader = self.pepare_data_loader()
-
         for epoch in range(self.num_epochs):
             print(f'======== Epoch {epoch + 1} / {self.num_epochs} ========')
             t0 = time.time()
@@ -70,7 +73,6 @@ class ColBERT_e2e_trainer(Trainer):
                     elapsed = self.format_time(time.time() - t0)
                     print(
                         f'Batch {step} of {len(train_dataloader)}. Elapsed: {elapsed}')
-
                 self.retriever.colbert.zero_grad()
                 questions = batch[0]
                 answers_indexes = batch[2]
@@ -88,7 +90,6 @@ class ColBERT_e2e_trainer(Trainer):
                     retrieved_documents, scores = self.retriever.retrieve_documents(query_options)
                     ### END OF DOCUMENT RETRIEVAL ###
 
-
                     ### BEGINNING OF RECALCULATING RETRIEVED DOCUMENTS SCORES
                     num_docs_retrieved = self.retriever.num_documents_reader
                     q_ids, q_mask = self.retriever.tokenizer.tensorize_queries(query_options)
@@ -99,7 +100,6 @@ class ColBERT_e2e_trainer(Trainer):
                         for j in range(len(retrieved_documents)):
                             retrieved_documents_reshaped.append(retrieved_documents[j][i])
 
-                    # test_retrieved_documents = [item for sublist in retrieved_documents for item in sublist]
                     d_ids, d_mask = self.retriever.tokenizer.tensorize_documents(retrieved_documents_reshaped)
                     d_ids, d_mask = d_ids.view(num_docs_retrieved, len(query_options), -1), d_mask.view(num_docs_retrieved, len(query_options), -1)
                     
@@ -146,11 +146,7 @@ class ColBERT_e2e_trainer(Trainer):
             print("Running Validation...")
 
             t0 = time.time()
-
-            # Put the model in evaluation mode--the dropout layers behave differently
-            # during evaluation.
             self.retriever.colbert.eval()
-            self.reader.model.eval()
 
             # Tracking variables
             total_eval_accuracy = 0
@@ -158,48 +154,58 @@ class ColBERT_e2e_trainer(Trainer):
 
             # Evaluate data for one epoch
             for step, batch in enumerate(val_dataloader):
-                if step % 25 == 0 and not step == 0:
+                if step % 10 == 0 and not step == 0:
                     elapsed = self.format_time(time.time() - t0)
                     print(
                         f'Batch {step} of {len(train_dataloader)}. Elapsed: {elapsed}')
+
                 questions = batch[0]
                 answers_indexes = batch[2]
-                options = batch[3]
-                metamap_phrases = batch[4]
+                options = [x.lower().split('#') for x in batch[3]]
+                metamap_phrases = [x.split('#') for x in batch[4]]
 
-                input_ids = []
-                token_type_ids = []
-                attention_masks = []
-
+                results = []
                 for q_idx in range(len(questions)):
-                    query = ' '.join(metamap_phrases[q_idx])
-                    # or
-                    # query = questions[q_idx]
-                    query_options = [x + ' ' + query for x in options[q_idx]]
-                    # retrieved_documents = [
-                    #     self.retriever.retrieve_documents(x) for x in query_options]
-                    retrieved_documents, scores = self.retriever.retrieve_documents(query_options)
+                    with torch.no_grad():
+                        ### BEGINNING OF DOCUMENT RETRIEVAL ###
+                        metamap_phrases[q_idx] = remove_duplicates_preserve_order(metamap_phrases[q_idx])
+                        query = ' '.join(metamap_phrases[q_idx])
+                        query_options = [x + ' ' + query for x in options[q_idx]]
 
-                    contexts = []
-                    for idx in range(len(retrieved_documents)):
-                        option_documents = []
-                        for document in retrieved_documents[idx]:
-                            option_documents.append(document['content'])
-                        contexts.append(' '.join(option_documents))
+                        retrieved_documents, scores = self.retriever.retrieve_documents(query_options)
+                        ### END OF DOCUMENT RETRIEVAL ###
 
-                    question_inputs = self.retriever.tokenizer(
-                        query_options, contexts, add_special_tokens=True, max_length=512, padding='max_length', truncation=True, return_tensors="pt")
-                    input_ids.append(question_inputs['input_ids'])
-                    token_type_ids.append(question_inputs['token_type_ids'])
-                    attention_masks.append(question_inputs['attention_mask'])
 
-                tensor_input_ids = torch.stack(input_ids, dim=0)
-                tensor_token_type_ids = torch.stack(token_type_ids, dim=0)
-                tensor_attention_masks = torch.stack(attention_masks, dim=0)
-                with torch.no_grad():
-                    output = self.reader.model(
-                        input_ids=tensor_input_ids.to(device), attention_mask=tensor_token_type_ids.to(device), token_type_ids=tensor_attention_masks.to(device))
-                loss = criterion(output, answers_indexes.to(device))
+                        ### BEGINNING OF RECALCULATING RETRIEVED DOCUMENTS SCORES
+                        num_docs_retrieved = self.retriever.num_documents_reader
+                        q_ids, q_mask = self.retriever.tokenizer.tensorize_queries(query_options)
+
+                        retrieved_documents_reshaped = []
+                        
+                        for i in range(len(retrieved_documents[0])):
+                            for j in range(len(retrieved_documents)):
+                                retrieved_documents_reshaped.append(retrieved_documents[j][i])
+
+                        # test_retrieved_documents = [item for sublist in retrieved_documents for item in sublist]
+                        d_ids, d_mask = self.retriever.tokenizer.tensorize_documents(retrieved_documents_reshaped)
+                        d_ids, d_mask = d_ids.view(num_docs_retrieved, len(query_options), -1), d_mask.view(num_docs_retrieved, len(query_options), -1)
+                        
+                        d_ids_stacked = [d_ids[i] for i in range(num_docs_retrieved)]
+                        d_mask_stacked = [d_mask[i] for i in range(num_docs_retrieved)]
+
+                        q_ids_stacked = [q_ids for i in range(num_docs_retrieved)]
+                        q_mask_stacked = [q_mask for i in range(num_docs_retrieved)]
+                                    
+                        Q = (torch.cat(q_ids_stacked), torch.cat(q_mask_stacked))
+                        D = (torch.cat(d_ids_stacked), torch.cat(d_mask_stacked))
+
+                        test = self.retriever.colbert(Q, D).view(num_docs_retrieved, -1).permute(1, 0)
+                        test_mean = torch.mean(test, dim=1).unsqueeze(0)
+                        results.append(test_mean)
+
+
+                results = torch.cat(results)
+                loss = criterion(results, answers_indexes.to(device))   
                 if self.num_gpus > 1:
                     loss = loss.mean()
                 # Accumulate the validation loss.
@@ -207,15 +213,13 @@ class ColBERT_e2e_trainer(Trainer):
 
                 # Move logits and labels to CPU
                 if device.type == 'cpu':
-                    output = output.numpy()
+                    output = results.numpy()
                     answers_indexes = answers_indexes.numpy()
                 else:
-                    output = output.detach().cpu().numpy()
+                    output = results.detach().cpu().numpy()
                     answers_indexes = answers_indexes.to('cpu').numpy()
                 total_eval_accuracy += self.calculate_accuracy(
                     output, answers_indexes)
-
-                break
 
             # Report the final accuracy for this validation run.
             avg_val_accuracy = total_eval_accuracy / len(val_dataloader)
@@ -234,11 +238,11 @@ class ColBERT_e2e_trainer(Trainer):
             training_info['training_stats'].append(
                 {
                     'epoch': epoch + 1,
-                    'Training Loss': avg_train_loss,
-                    'Valid. Loss': avg_val_loss,
-                    'Valid. Accur.': avg_val_accuracy,
                     'Training Time': training_time,
-                    'Validation Time': validation_time
+                    'Training Loss': avg_train_loss,
+                    'Validation Time': validation_time,
+                    'Validation Loss': avg_val_loss,
+                    'Validation Accuracy.': avg_val_accuracy
                 }
             )
 
