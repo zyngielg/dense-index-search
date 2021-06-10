@@ -99,6 +99,8 @@ class ColBERT_retriever(Retriever):
             # Q = self.colbert.module.query(input_ids, mask)
             Q = self.colbert.query(input_ids, mask)
 
+
+            # 150000 
             # queries_to_embedding_ids
             num_queries, embeddings_per_query, dim = Q.size()
             Q_faiss = Q.view(num_queries * embeddings_per_query,
