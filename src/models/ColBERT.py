@@ -33,48 +33,14 @@ class ColBERT(BertPreTrainedModel):
 
         self.init_weights()
 
-    def forward(self, Q, D):
-        return self.score(self.query(*Q), self.doc(*D))
-
-    def query(self, input_ids, attention_mask):
+    def forward(self, input_ids, attention_mask):
         input_ids, attention_mask = input_ids.to(
             self.DEVICE), attention_mask.to(self.DEVICE)
-        Q = self.bert(input_ids, attention_mask=attention_mask)[0]
-        Q = self.linear(Q)
 
-        return torch.nn.functional.normalize(Q, p=2, dim=2)
+        bert_output = self.bert(input_ids, attention_mask=attention_mask)[0]
+        output_reduced = self.linear(bert_output)
 
-    def doc(self, input_ids, attention_mask, keep_dims=True):
-        with torch.no_grad():
-            input_ids, attention_mask = input_ids.to(
-                self.DEVICE), attention_mask.to(self.DEVICE)
-            D = self.bert(input_ids=input_ids, attention_mask=attention_mask)[0]
-            D = self.linear(D)
-
-            # filtering out the punctuation symbols
-            mask = torch.tensor(self.mask(input_ids),
-                                device=self.DEVICE).unsqueeze(2).float()
-            D = D * mask
-
-            D = torch.nn.functional.normalize(D, p=2, dim=2)
-
-            if not keep_dims:
-                D, mask = D.cpu().to(dtype=torch.float16), mask.cpu().bool().squeeze(-1)
-                D = [d[mask[idx]] for idx, d in enumerate(D)]
-
-            return D
-
-    def score(self, Q, D):
-        if self.similarity_metric == 'cosine':
-            x = (Q @ D.permute(0, 2, 1))
-            return x.max(2).values.sum(1)
-        else: # l2        
-            return (-1.0 * ((Q.unsqueeze(2) - D.unsqueeze(1))**2).sum(-1)).max(-1).values.sum(-1)
-
-    def mask(self, input_ids):
-        mask = [[(x not in self.skiplist) and (x != 0) for x in d]
-                for d in input_ids.cpu().tolist()]
-        return mask
+        return output_reduced
 
     @staticmethod
     def load_checkpoint(path, model):

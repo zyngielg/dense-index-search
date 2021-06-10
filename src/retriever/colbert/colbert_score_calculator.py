@@ -50,7 +50,7 @@ class ColBERTScoreCalculator():
         output_pids, output_scores, output_permutation = [], [], []
 
         for group_idx, stride in enumerate(self.strides):
-            inner_device_idx = group_idx % 3 + 1
+            inner_device_idx = group_idx % 2 + 1
             inner_DEVICE = torch.device(f"cuda:{inner_device_idx}")
             locator = (assignments == group_idx)
 

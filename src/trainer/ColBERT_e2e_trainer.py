@@ -73,6 +73,7 @@ class ColBERT_e2e_trainer(Trainer):
                     elapsed = self.format_time(time.time() - t0)
                     print(
                         f'Batch {step} of {len(train_dataloader)}. Elapsed: {elapsed}')
+                    break
                 self.retriever.colbert.zero_grad()
                 questions = batch[0]
                 answers_indexes = batch[2]
@@ -112,7 +113,7 @@ class ColBERT_e2e_trainer(Trainer):
                     Q = (torch.cat(q_ids_stacked), torch.cat(q_mask_stacked))
                     D = (torch.cat(d_ids_stacked), torch.cat(d_mask_stacked))
 
-                    test = self.retriever.colbert(Q, D).view(num_docs_retrieved, -1).permute(1, 0)
+                    test = self.retriever.score(Q, D).view(num_docs_retrieved, -1).permute(1, 0)
                     test_mean = torch.mean(test, dim=1).unsqueeze(0)
                     results.append(test_mean)
 
@@ -157,7 +158,7 @@ class ColBERT_e2e_trainer(Trainer):
                 if step % 10 == 0 and not step == 0:
                     elapsed = self.format_time(time.time() - t0)
                     print(
-                        f'Batch {step} of {len(train_dataloader)}. Elapsed: {elapsed}')
+                        f'Batch {step} of {len(val_dataloader)}. Elapsed: {elapsed}')
 
                 questions = batch[0]
                 answers_indexes = batch[2]
@@ -199,7 +200,7 @@ class ColBERT_e2e_trainer(Trainer):
                         Q = (torch.cat(q_ids_stacked), torch.cat(q_mask_stacked))
                         D = (torch.cat(d_ids_stacked), torch.cat(d_mask_stacked))
 
-                        test = self.retriever.colbert(Q, D).view(num_docs_retrieved, -1).permute(1, 0)
+                        test = self.retriever.score(Q, D).view(num_docs_retrieved, -1).permute(1, 0)
                         test_mean = torch.mean(test, dim=1).unsqueeze(0)
                         results.append(test_mean)
 
