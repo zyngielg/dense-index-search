@@ -21,12 +21,12 @@ class REALM_like_retriever_base_BERT_reader_trainer(Trainer):
     def pepare_data_loader(self):
         print("******** Creating train dataloader ********")
         train_dataloader = create_questions_data_loader(
-            questions=self.questions_train, tokenizer=self.retriever.tokenizer, batch_size=self.batch_size)
+            questions=self.questions_train, batch_size=self.batch_size, num_questions=len(self.questions_train))
         print("******** Train dataloader created  ********")
 
         print("******** Creating val dataloader ********")
         val_dataloader = create_questions_data_loader(
-            questions=self.questions_val, tokenizer=self.retriever.tokenizer, batch_size=self.batch_size)
+            questions=self.questions_val, batch_size=self.batch_size, num_questions=len(self.questions_train))
         print("******** Val dataloader created  ********")
 
         return train_dataloader, val_dataloader

@@ -16,8 +16,8 @@ class ColBERT_e2e_trainer(Trainer):
     def __init__(self, questions: MedQAQuestions, retriever: ColBERT_retriever, num_epochs: int, batch_size: int, lr: float) -> None:
         super().__init__(questions, retriever, None, num_epochs, batch_size, lr)
         self.batch_size = 4
-        self.num_train_questions = 4000
-        self.num_val_questions = 500
+        self.num_train_questions = 1000
+        self.num_val_questions = 200
 
     def pepare_data_loader(self):
         print("******** Creating train dataloader ********")

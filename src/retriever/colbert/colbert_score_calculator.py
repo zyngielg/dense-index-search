@@ -36,14 +36,21 @@ class ColBERTScoreCalculator():
         raw_pids = pids if type(pids) is list else pids.tolist()
         pids = torch.tensor(pids) if type(pids) is list else pids
 
-        doclens, offsets = self.doclens[pids], self.doclens_pfxsum[pids]        
+        doclens, offsets = self.doclens[pids], self.doclens_pfxsum[pids]      
+
+        x = doclens.unsqueeze(1)
+        xx = torch.tensor(self.strides)
+        xxx = xx.unsqueeze(0) + 1e-6
+        y = (x > xx)
+        yy = y.sum(-1)
+
         assignments = (doclens.unsqueeze(1) > torch.tensor(self.strides).unsqueeze(0) + 1e-6).sum(-1)
 
         one_to_n = torch.arange(len(raw_pids))
         output_pids, output_scores, output_permutation = [], [], []
 
         for group_idx, stride in enumerate(self.strides):
-            inner_device_idx = 2 if group_idx % 2 == 0 else 3
+            inner_device_idx = group_idx % 3 + 1
             inner_DEVICE = torch.device(f"cuda:{inner_device_idx}")
             locator = (assignments == group_idx)
 
@@ -65,9 +72,18 @@ class ColBERTScoreCalculator():
             # print(f"D_size={D_size}")
             try:
                 D = torch.index_select(self.views[group_idx], 0, group_offsets_uniq, out=D_buffers[group_idx][:D_size])
-            except:
+                # D = torch.index_select(self.views[group_idx], 0, group_offsets_uniq)
+                # print(f"Shape of views num {group_idx}: {self.views[group_idx].shape}")
+                # print(f"Shape of group_offsets_uniq: {group_offsets_uniq.shape}")
+                # print(f"Max value in group_offsets_uniq: {max(group_offsets_uniq)}")
+                # print(f"Shape of D_buffers num {group_idx}: {D_buffers[group_idx].shape}")
+                # print(f"D_size={D_size}")
+            except Exception as inst:
+                # # print(type(inst))    # the exception instance
+                # # print(inst.args)     # arguments stored in .args
+                # # print(inst)
                 self.issue_counter += 1
-                # TODO: very often the max is the same number all the time
+                # # TODO: very often the max is the same number all the time
                 # print(f"Shape of views num {group_idx}: {self.views[group_idx].shape}")
                 # print(f"Shape of group_offsets_uniq: {group_offsets_uniq.shape}")
                 # print(f"Max value in group_offsets_uniq: {max(group_offsets_uniq)}")
@@ -75,8 +91,9 @@ class ColBERTScoreCalculator():
                 # print(f"D_size={D_size}")
                 zeros = torch.zeros_like(group_offsets_uniq)
                 group_offsets_uniq = torch.where(group_offsets_uniq > self.views[group_idx].shape[0], zeros, group_offsets_uniq)
+                # D_size = group_offsets_uniq.size(0)
                 D = torch.index_select(self.views[group_idx], 0, group_offsets_uniq, out=D_buffers[group_idx][:D_size])
-            
+                # D = torch.index_select(self.views[group_idx], 0, group_offsets_uniq)
             D = D.to(inner_DEVICE)
             D = D[group_offsets_expand.to(inner_DEVICE)].to(dtype=self.maxsim_dtype)
 

@@ -8,7 +8,7 @@ from data.medqa_questions import MedQAQuestions
 from reader.base_bert_reader import Base_BERT_Reader
 
 # TODO: move to separate config file
-num_epochs = 3
+num_epochs = 4
 batch_size = 16
 lr = 5e-5
 

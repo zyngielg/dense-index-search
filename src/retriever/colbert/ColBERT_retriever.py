@@ -22,7 +22,7 @@ class ColBERT_retriever(Retriever):
     bert_name = "emilyalsentzer/Bio_ClinicalBERT"
     # change to specify the weights file
     q_encoder_weights_path = ""
-    num_documents_faiss = 1000
+    num_documents_faiss = 1500
     num_documents_reader = 10
     layers_to_not_freeze = ['8', '9', '10', '11', 'linear']
 
@@ -99,8 +99,6 @@ class ColBERT_retriever(Retriever):
             # Q = self.colbert.module.query(input_ids, mask)
             Q = self.colbert.query(input_ids, mask)
 
-
-            # 150000 
             # queries_to_embedding_ids
             num_queries, embeddings_per_query, dim = Q.size()
             Q_faiss = Q.view(num_queries * embeddings_per_query,
@@ -181,9 +179,11 @@ class ColBERT_retriever(Retriever):
                 ids, mask = self.tokenizer.tensorize_documents(contents)
                 # test = self.tokenizer.doc_tokenizer.decode(ids[0])
                 with torch.no_grad():
-                    batch_embeddings = self.colbert.module.doc(ids, mask, keep_dims=False)
+                    # batch_embeddings = self.colbert.module.doc(ids, mask, keep_dims=False)
+                    batch_embeddings = self.colbert.doc(ids, mask, keep_dims=False)
                 self.doc_embeddings_lengths += [d.size(0) for d in batch_embeddings]
                 embeddings.append(torch.cat(batch_embeddings))
+                
             
             save_pickle(self.doc_embeddings_lengths,
                         self.doc_embeddings_lengths_path)
