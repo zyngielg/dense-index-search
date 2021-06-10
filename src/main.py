@@ -8,7 +8,7 @@ from data.medqa_questions import MedQAQuestions
 from reader.base_bert_reader import Base_BERT_Reader
 
 # TODO: move to separate config file
-num_epochs = 3
+num_epochs = 4
 batch_size = 16
 lr = 5e-5
 
@@ -44,7 +44,7 @@ if __name__ == "__main__":
     retriever_reader_factory = ReaderRetrieverFactory(
         retriever_choice=args.retriever, reader_choice=args.reader)
     retriever = retriever_reader_factory.create_retriever()
-    retriever.prepare_retriever(corpus=medqa_corpus, create_chunks=False, create_encodings=False, create_index=False)
+    retriever.prepare_retriever(corpus=None, create_encodings=False, create_index=False)
     reader = retriever_reader_factory.create_reader()
 
     if args.mode == "QA":

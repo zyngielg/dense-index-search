@@ -92,7 +92,7 @@ class REALM_like_retriever(Retriever):
         query_faiss_input = query_embedding.cpu().detach().reshape(1, 768).numpy()
         _, I = self.index.search(query_faiss_input, self.num_documents)
 
-        retrieved_documents = [self.corpus_chunks[i] for i in I[0]]
+        retrieved_documents = [self.corpus_chunks[i] for i in I[0] if i < len(corpus_chunks)]
         return retrieved_documents
 
     def freeze_layers(self):
@@ -106,13 +106,13 @@ class REALM_like_retriever(Retriever):
             #     print(
             #         f"Layer {name} not frozen (status: {param.requires_grad})")
 
-    def prepare_retriever(self, corpus: MedQACorpus = None, create_chunks=True, create_encodings=True, create_index=True):
+    def prepare_retriever(self, corpus: MedQACorpus = None, create_encodings=True, create_index=True):
         if self.used_chunks_size == 100:
             chunks_path = self.chunk_100_unstemmed_path
         elif self.used_chunks_size == 150:
             chunks_path = self.chunk_150_unstemmed_path
             
-        if create_chunks:
+        if corpus:
             self.corpus_chunks = self.__create_corpus_chunks(
                 corpus=corpus.corpus, chunk_length=self.used_chunks_size)
             save_pickle(self.corpus_chunks, chunks_path)

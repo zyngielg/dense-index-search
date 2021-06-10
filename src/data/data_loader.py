@@ -51,17 +51,17 @@ def create_medqa_data_loader(input_queries, input_answers, input_answers_idx, ba
                       batch_size=batch_size)
 
 
-def create_questions_data_loader(questions, tokenizer, batch_size):
-    questions_text = [x['question'] for x in questions.values()]
-    answers = [x['answer'] for x in questions.values()]
-    answers_idx = [ord(x['answer_idx']) - 65 for x in questions.values()]
-    options = ['#'.join(list(x['options'].values())) for x in questions.values()]
+def create_questions_data_loader(questions, batch_size, num_questions):
+    questions_text = [x['question'] for x in questions.values()][:num_questions]
+    answers = [x['answer'] for x in questions.values()][:num_questions]
+    answers_idx = [ord(x['answer_idx']) - 65 for x in questions.values()][:num_questions]
+    options = ['#'.join(list(x['options'].values())) for x in questions.values()][:num_questions]
     
     metamap_phrases = [x['metamap_phrases'] for x in questions.values()]
     metamap_phrases_max_len = len(max(metamap_phrases, key=len))
     metamap_phrases = [
         x + [''] * (metamap_phrases_max_len - len(x)) for x in metamap_phrases]
-    metamap_phrases = ['#'.join(x) for x in metamap_phrases]
+    metamap_phrases = ['#'.join(x) for x in metamap_phrases][:num_questions]
     # questions_text = [x + ' ' * (questions_text_max_len - len(x))
     #                   for x in questions_text]
     # answers = [x + ' ' * (answers_max_len - len(x)) for x in answers]

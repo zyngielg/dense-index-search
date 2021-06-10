@@ -8,13 +8,13 @@ import torch
 from data.data_loader import create_questions_data_loader
 from data.medqa_questions import MedQAQuestions
 from reader.base_bert_reader import Base_BERT_Reader
-from retriever.colbert.ColBERT_like_retriever import ColBERT_like_retriever
+from retriever.colbert.ColBERT_retriever import ColBERT_retriever
 from trainer.trainer import Trainer
 from transformers import get_linear_schedule_with_warmup
 from utils.general_utils import remove_duplicates_preserve_order
 
 class ColBERT_retriever_Base_BERT_reader_trainer(Trainer):
-    def __init__(self, questions: MedQAQuestions, retriever: ColBERT_like_retriever, reader: Base_BERT_Reader, num_epochs: int, batch_size: int, lr: float) -> None:
+    def __init__(self, questions: MedQAQuestions, retriever: ColBERT_retriever, reader: Base_BERT_Reader, num_epochs: int, batch_size: int, lr: float) -> None:
         super().__init__(questions, retriever, reader, num_epochs, batch_size, lr)
 
     def pepare_data_loader(self):
@@ -151,7 +151,7 @@ class ColBERT_retriever_Base_BERT_reader_trainer(Trainer):
 
             # Put the model in evaluation mode--the dropout layers behave differently
             # during evaluation.
-            self.retriever.q_encoder.eval()
+            self.retriever.colbert.eval()
             self.reader.model.eval()
 
             # Tracking variables
