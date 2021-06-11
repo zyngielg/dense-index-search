@@ -16,8 +16,8 @@ class ColBERT_e2e_trainer(Trainer):
     def __init__(self, questions: MedQAQuestions, retriever: ColBERT_retriever, num_epochs: int, batch_size: int, lr: float) -> None:
         super().__init__(questions, retriever, None, num_epochs, batch_size, lr)
         self.batch_size = 4
-        self.num_train_questions = 1000
-        self.num_val_questions = 200
+        self.num_train_questions = 100
+        self.num_val_questions = 300
 
     def pepare_data_loader(self):
         print("******** Creating train dataloader ********")
@@ -30,8 +30,8 @@ class ColBERT_e2e_trainer(Trainer):
             questions=self.questions_val, batch_size=self.batch_size, num_questions=self.num_val_questions)
         print("******** Val dataloader created  ********")
 
-        return train_dataloader, val_dataloader
-        # return  val_dataloader, val_dataloader
+        # return train_dataloader, val_dataloader
+        return  val_dataloader, val_dataloader
 
 
     def train(self):
@@ -73,7 +73,7 @@ class ColBERT_e2e_trainer(Trainer):
                     elapsed = self.format_time(time.time() - t0)
                     print(
                         f'Batch {step} of {len(train_dataloader)}. Elapsed: {elapsed}')
-                    break
+                    
                 self.retriever.colbert.zero_grad()
                 questions = batch[0]
                 answers_indexes = batch[2]
@@ -93,7 +93,7 @@ class ColBERT_e2e_trainer(Trainer):
 
                     ### BEGINNING OF RECALCULATING RETRIEVED DOCUMENTS SCORES
                     num_docs_retrieved = self.retriever.num_documents_reader
-                    q_ids, q_mask = self.retriever.tokenizer.tensorize_queries(query_options)
+                    q_ids, q_mask = self.retriever.tokenizer.tensorize_queries([query_options, query_options])
 
                     retrieved_documents_reshaped = []
                     
@@ -129,6 +129,8 @@ class ColBERT_e2e_trainer(Trainer):
 
                 optimizer.step()
                 scheduler.step()
+
+                break
                 
 
             # Calculate the average loss over all of the batches.
@@ -158,7 +160,7 @@ class ColBERT_e2e_trainer(Trainer):
                 if step % 10 == 0 and not step == 0:
                     elapsed = self.format_time(time.time() - t0)
                     print(
-                        f'Batch {step} of {len(val_dataloader)}. Elapsed: {elapsed}')
+                        f'Batch {step} of {len(val_dataloader)}. Elapsed: {elapsed}')                    
 
                 questions = batch[0]
                 answers_indexes = batch[2]
@@ -247,7 +249,7 @@ class ColBERT_e2e_trainer(Trainer):
                 }
             )
 
-            print(f"Num of issues: {self.retriever.score_calc.issue_counter}")
+            print(f"Num of issues: {self.retriever.score_calc.issue_counter}/{self.retriever.score_calc.attempt_counter}")
 
         print("Training complete!")
 

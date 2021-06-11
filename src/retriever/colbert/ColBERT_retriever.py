@@ -22,7 +22,7 @@ class ColBERT_retriever(Retriever):
     bert_name = "emilyalsentzer/Bio_ClinicalBERT"
     # change to specify the weights file
     q_encoder_weights_path = ""
-    num_documents_faiss = 1500
+    num_documents_faiss = 1000
     num_documents_reader = 10
     layers_to_not_freeze = ['8', '9', '10', '11', 'linear']
 
@@ -37,6 +37,12 @@ class ColBERT_retriever(Retriever):
     document_embeddings_tensor_path = "data/colbert/document_embeddings_tensor.pt"
     embbedding2doc_id_path = "data/colbert/embbedding2doc_id_[colbert][clinicalbiobert200000][cosine-sim][chunks100unprocessed].pickle"
     doc_embeddings_lengths_path = "data/colbert/document_embeddings_lengths_[colbert][clinicalbiobert200000][cosine-sim][chunks100unprocessed].pickle"
+    # faiss_index_path = "data/colbert/index2_[colbert][clinicalbiobert200000][cosine-sim][chunks100unprocessed].index"
+    # document_embeddings_path = "data/colbert/document_embeddings2_[colbert][clinicalbiobert200000][cosine-sim][chunks100unprocessed].pickle"
+    # document_embeddings_tensor_path = "data/colbert/document_embeddings_tensor2.pt"
+    # document_embeddings_tensor_3d_path = "data/colbert/document_embeddings_tensor_3d.pt"
+    # embbedding2doc_id_path = "data/colbert/embbedding2doc_id2_[colbert][clinicalbiobert200000][cosine-sim][chunks100unprocessed].pickle"
+    # doc_embeddings_lengths_path = "data/colbert/document_embeddings_lengths2_[colbert][clinicalbiobert200000][cosine-sim][chunks100unprocessed].pickle"
 
     def __init__(self, load_weights=False, load_index=False) -> None:
         super().__init__()
@@ -79,24 +85,30 @@ class ColBERT_retriever(Retriever):
         Q = self.colbert(input_ids, attention_mask=attention_mask)
         return torch.nn.functional.normalize(Q, p=2, dim=2)
 
-    def doc(self, input_ids, attention_mask, keep_dims=True):
+    def doc(self, input_ids, attention_mask, keep_dims=True, get_3d=False):
         with torch.no_grad():
             # input_ids, attention_mask = input_ids.to(
             #     self.DEVICE), attention_mask.to(self.DEVICE)
-            D = self.colbert(input_ids=input_ids, attention_mask=attention_mask)
+            D = self.colbert(input_ids=input_ids,
+                             attention_mask=attention_mask)
 
             # filtering out the punctuation symbols
             mask = torch.tensor(self.mask(input_ids),
                                 device=D.device).unsqueeze(2).float()
             D = D * mask
 
-            D = torch.nn.functional.normalize(D, p=2, dim=2)
+            D_3d = torch.nn.functional.normalize(D, p=2, dim=2)
+            if get_3d:
+                D_2d, mask = D_3d.cpu().to(dtype=torch.float16), mask.cpu().bool().squeeze(-1)
+                D_2d = [d[mask[idx]] for idx, d in enumerate(D)]
 
-            if not keep_dims:
-                D, mask = D.cpu().to(dtype=torch.float16), mask.cpu().bool().squeeze(-1)
-                D = [d[mask[idx]] for idx, d in enumerate(D)]
+                return D_2d, D_3d.cpu()
+            # if not keep_dims:
+            #     D, mask = D.cpu().to(dtype=torch.float16), mask.cpu().bool().squeeze(-1)
+            #     x = (D[1][100])
+            #     D = [d[mask[idx]] for idx, d in enumerate(D)]
 
-            return D
+            return None, D_3d
 
     def score(self, Q, D):
         Q, D = self.query(*Q), self.doc(*D)
@@ -131,45 +143,53 @@ class ColBERT_retriever(Retriever):
 
     def retrieve_documents(self, queries: list):
         all_retrieved_docs, all_scores = [], []
-        for query in queries:
-            input_ids, mask = self.tokenizer.tensorize_queries([query])
-            # Q = self.colbert.module.query(input_ids, mask)
-            Q = self.query(input_ids, mask)
 
-            # 150000
-            # queries_to_embedding_ids
-            num_queries, embeddings_per_query, dim = Q.size()
-            Q_faiss = Q.view(num_queries * embeddings_per_query,
-                             dim).cpu().detach().float().numpy()
-            # Error: 'k <= (Index::idx_t) getMaxKSelection()' failed: GPU index only supports k <= 2048 (requested 10000)
-            _, embeddings_ids = self.index.search(
-                Q_faiss, self.num_documents_faiss)
-            embeddings_ids = torch.from_numpy(embeddings_ids)
+        torch.cuda.synchronize('cuda:0')
+        queries = [queries[0]]
+        input_ids, mask = self.tokenizer.tensorize_queries(queries)
+        # Q = self.colbert.module.query(input_ids, mask)
+        Q = self.query(input_ids, mask)
 
-            embeddings_ids = embeddings_ids.view(
-                num_queries, embeddings_per_query * embeddings_ids.size(1))
-            # embedding_ids_to_pids
-            doc_ids = self.embbedding2doc_id[embeddings_ids].tolist()
-            doc_ids = list(map(uniq, doc_ids))[0]
+        num_queries, embeddings_per_query, dim = Q.size()
+        Q_faiss = Q.view(num_queries * embeddings_per_query,
+                         dim).cpu().detach().float().numpy()
+        # # Error: 'k <= (Index::idx_t) getMaxKSelection()' failed: GPU index only supports k <= 2048 (requested 10000)
+        _, embeddings_ids = self.index.search(
+            Q_faiss, self.num_documents_faiss)
+        embeddings_ids = torch.from_numpy(embeddings_ids)
 
-            # rank
-            # .to(self.device).to(dtype=torch.float32)
-            Q = Q.permute(0, 2, 1).contiguous().to(dtype=torch.float32)
-            # preprocessing
-            scores = self.score_calc.calculate_scores(Q, doc_ids)
-            scores_sorted = torch.tensor(scores).sort(descending=True)
-            doc_ids, scores = torch.tensor(
-                doc_ids)[scores_sorted.indices].tolist(), scores_sorted.values  # .tolist()
 
-            # documents extraction
 
-            retrieved_documents = []
 
-            # TODO: HERE I LOSE GRADIENTS
-            for id in doc_ids[:self.num_documents_reader]:
-                retrieved_documents.append(self.documents[id])
-            all_retrieved_docs.append(retrieved_documents)
-            all_scores.append(scores[:self.num_documents_reader])
+        embeddings_ids = embeddings_ids.view(
+            num_queries, embeddings_per_query * embeddings_ids.size(1))
+        # embedding_ids_to_pids
+        doc_ids = self.embbedding2doc_id[embeddings_ids].tolist()
+        print(f"Shape of embedding2doc: {self.embbedding2doc_id.shape}")
+        print(f"Embeddings_ids: shape: {embeddings_ids.shape}: max0: {torch.max(embeddings_ids[0])} max1: {torch.max(embeddings_ids[1])} ")
+        doc_ids = list(map(uniq, doc_ids))
+        # rank
+
+        # # rank
+        # # .to(self.device).to(dtype=torch.float32)
+        Q = Q.permute(0, 2, 1).contiguous().to(dtype=torch.float32)
+
+        # # preprocessing
+        scores = self.score_calc.calculate_scores(Q, doc_ids)
+        # scores_sorted = torch.tensor(scores).sort(descending=True)
+        # doc_ids, scores = torch.tensor(
+        #     doc_ids)[scores_sorted.indices].tolist(), scores_sorted.values  # .tolist()
+
+        # # documents extraction
+
+        # retrieved_documents = []
+
+        # # TODO: HERE I LOSE GRADIENTS
+        # for id in doc_ids[:self.num_documents_reader]:
+        #     retrieved_documents.append(self.documents[id])
+        # all_retrieved_docs.append(retrieved_documents)
+        # all_scores.append(scores[:self.num_documents_reader])
+        torch.cuda.synchronize('cuda:0')
         return all_retrieved_docs, all_scores
 
     def freeze_layers(self):
@@ -210,7 +230,8 @@ class ColBERT_retriever(Retriever):
             print("******** 1a. Creating document embeddings ... ********")
             embeddings = []
             self.doc_embeddings_lengths = []
-            batch_size = 100
+            embeddings_3d = []
+            batch_size = 10
             for idx in tqdm(range(0, len(self.documents), batch_size)):
                 contents = self.documents[idx:idx+batch_size]
 
@@ -218,13 +239,18 @@ class ColBERT_retriever(Retriever):
                 # test = self.tokenizer.doc_tokenizer.decode(ids[0])
                 with torch.no_grad():
                     # batch_embeddings = self.colbert.module.doc(ids, mask, keep_dims=False)
-                    batch_embeddings = self.doc(ids, mask, keep_dims=False)
+                    batch_embeddings, batch_embeddings_3d = self.doc(
+                        ids, mask, keep_dims=False, get_3d=True)
                 self.doc_embeddings_lengths += [d.size(0)
                                                 for d in batch_embeddings]
                 embeddings.append(torch.cat(batch_embeddings))
+                embeddings_3d.append(batch_embeddings_3d)
 
-            save_pickle(self.doc_embeddings_lengths,
-                        self.doc_embeddings_lengths_path)
+            
+            self.embeddings_tensor_3d = torch.cat(embeddings_3d, dim=0)
+            
+            # save_pickle(self.doc_embeddings_lengths,
+            #             self.doc_embeddings_lengths_path)
             self.embeddings_tensor = torch.cat(embeddings)
             assert dimension == self.embeddings_tensor.shape[-1]
 
@@ -245,6 +271,8 @@ class ColBERT_retriever(Retriever):
                 "******** 1c. Saving document embeddings and embedding2doc_id to file ... ********")
             torch.save(self.embeddings_tensor,
                        self.document_embeddings_tensor_path)
+            torch.save(self.embeddings_tensor_3d,
+                       self.document_embeddings_tensor_3d_path)
             save_pickle(self.embbedding2doc_id, self.embbedding2doc_id_path)
             print("********     ... embeddings and matrix saved *********")
         else:

@@ -1,10 +1,11 @@
+from numpy import float32
 import torch
 from itertools import accumulate
 from utils.general_utils import torch_percentile
 
 class ColBERTScoreCalculator():
     issue_counter = 0
-
+    attempt_counter = 0
     def __init__(self, doclens, embeddings_tensor, device) -> None:
         self.device = device
         self.maxsim_dtype = torch.float32
@@ -26,7 +27,7 @@ class ColBERTScoreCalculator():
     def calculate_scores(self, Q, pids, mode=2):
         assert len(pids) > 0
         assert Q.size(0) in [1, len(pids)]
-
+        print(sum(self.doclens))   
         Q = Q.contiguous().to(self.device).to(dtype=self.maxsim_dtype)
         
         VIEWS_DEVICE = self.views[0].device
@@ -34,15 +35,59 @@ class ColBERTScoreCalculator():
         D_buffers = self.buffers[str(VIEWS_DEVICE)]
 
         raw_pids = pids if type(pids) is list else pids.tolist()
-        pids = torch.tensor(pids) if type(pids) is list else pids
+
+        
+
+        for i in range(4):
+            D = torch.index_select(self.embeddings_tensor, 0, torch.tensor(raw_pids[0])).to(self.device, dtype=torch.float32)
+            doclens, offsets = self.doclens[raw_pids[0]], self.doclens_pfxsum[raw_pids[0]]
+
+            scores = D @ Q[i]
+            x = scores.max(1)
+            y = x.sum(-1).cpu()
+            z = 2
+
+        pids = []
+        for x in raw_pids:
+            pids.append(torch.tensor(x))
+        pids = torch.cat(pids)
+
+        D = torch.index_select(self.embeddings_tensor, 0, pids).to(self.device, dtype=torch.float32)
+        Ds = []
+        # for i in 
+        
+        doclens, offsets = self.doclens[pids], self.doclens_pfxsum[pids]
+        
+        for i in range(Q.size(0)):
+            pass
+
+        scores = (D @ Q)
+        score_two = D @ Q[0]
+        x = scores.max(1).values.sum(-1)
+ 
+
+        Ds = []
+        for doc_ids in raw_pids:
+            Ds.append(torch.index_select(self.embeddings_tensor, 0, torch.tensor(doc_ids)).to(self.device, dtype=torch.float32))
+        Ds = torch.cat(Ds, dim=0)
+        scores_two = (Ds @ Q).max(1).values.sum(-1)
 
         doclens, offsets = self.doclens[pids], self.doclens_pfxsum[pids]      
+        print(sum(self.doclens))
+        scores = (Ds @ Q)
+        x = scores.max(1)
+        y = x.values.sum(-1)
+        scores_two = Q @ D
 
-        x = doclens.unsqueeze(1)
-        xx = torch.tensor(self.strides)
-        xxx = xx.unsqueeze(0) + 1e-6
-        y = (x > xx)
-        yy = y.sum(-1)
+
+
+
+
+
+
+
+
+
 
         assignments = (doclens.unsqueeze(1) > torch.tensor(self.strides).unsqueeze(0) + 1e-6).sum(-1)
 
@@ -70,6 +115,7 @@ class ColBERTScoreCalculator():
             # print(f"Max value in group_offsets_uniq: {max(group_offsets_uniq)}")
             # print(f"Shape of D_buffers num {group_idx}: {D_buffers[group_idx].shape}")
             # print(f"D_size={D_size}")
+            self.attempt_counter += 1
             try:
                 D = torch.index_select(self.views[group_idx], 0, group_offsets_uniq, out=D_buffers[group_idx][:D_size])
                 # D = torch.index_select(self.views[group_idx], 0, group_offsets_uniq)

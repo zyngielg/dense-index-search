@@ -31,7 +31,7 @@ class ColBERT(BertPreTrainedModel):
         self.bert = BertModel.from_pretrained(config._name_or_path)
         self.linear = nn.Linear(config.hidden_size, dim, bias=False)
 
-        self.init_weights()
+        # self.init_weights()
 
     def forward(self, input_ids, attention_mask):
         input_ids, attention_mask = input_ids.to(

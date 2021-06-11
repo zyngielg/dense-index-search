@@ -26,7 +26,9 @@ class ColbertTokenizer():
         # add placehold for the [D] marker
         documents = ['. ' + x for x in documents]
 
-        obj = self.doc_tokenizer(documents, padding='longest', truncation='longest_first',
+        # obj = self.doc_tokenizer(documents, padding='longest', truncation='longest_first',
+        #                          return_tensors='pt', max_length=self.doc_maxlen)
+        obj = self.doc_tokenizer(documents, padding='max_length', truncation='longest_first',
                                  return_tensors='pt', max_length=self.doc_maxlen)
 
         ids, mask = obj['input_ids'], obj['attention_mask']
