@@ -4,6 +4,7 @@ import numpy as np
 import random
 import time
 import torch
+from torch.utils.data import dataloader
 
 from data.data_loader import create_medqa_data_loader
 from data.medqa_questions import MedQAQuestions
@@ -21,22 +22,23 @@ class IrEsBaseBertTrainer(Trainer):
         super().__init__(questions, retriever, reader, num_epochs, batch_size, lr)
 
     def pepare_data_loader(self):
-        print("******** Creating train dataloader ********")
-        train_input_queries, train_input_answers, train_input_answers_idx = self.retriever.create_tokenized_input(
-            questions=self.questions_train, tokenizer=self.reader.tokenizer, train_set=True)
+        # print("******** Creating train dataloader ********")
+        # train_input_queries, train_input_answers, train_input_answers_idx = self.retriever.create_tokenized_input(
+        #     questions=self.questions_train, tokenizer=self.reader.tokenizer, docs_flag=0)
 
-        train_dataloader = create_medqa_data_loader(input_queries=train_input_queries, input_answers=train_input_answers,
-                                                    input_answers_idx=train_input_answers_idx, batch_size=self.batch_size)
-        print("******** Train dataloader created  ********")
+        # train_dataloader = create_medqa_data_loader(input_queries=train_input_queries, input_answers=train_input_answers,
+        #                                             input_answers_idx=train_input_answers_idx, batch_size=self.batch_size)
+        # print("******** Train dataloader created  ********")
 
         print("******** Creating val dataloader ********")
 
         val_input_queries, val_input_answers, val_input_answers_idx = self.retriever.create_tokenized_input(
-            questions=self.questions_val, tokenizer=self.reader.tokenizer, train_set=False)
+            questions=self.questions_val, tokenizer=self.reader.tokenizer, docs_flag=1, num_questions=len(self.questions_val))
         val_dataloader = create_medqa_data_loader(input_queries=val_input_queries, input_answers=val_input_answers,
                                                   input_answers_idx=val_input_answers_idx, batch_size=self.batch_size)
         print("******** Val dataloader created  ********")
-        return train_dataloader, val_dataloader
+        # return train_dataloader, val_dataloader
+        return val_dataloader, val_dataloader
 
     def train(self):
         super().train()
@@ -54,19 +56,18 @@ class IrEsBaseBertTrainer(Trainer):
             "total_training_time": None,
             "training_stats": []
         }
-
+        num_epochs = 10  # self.num_epochs
+        train_dataloader, val_dataloader = self.pepare_data_loader()
         criterion = torch.nn.CrossEntropyLoss()
         optimizer = torch.optim.AdamW(
             self.reader.model.parameters(), lr=self.lr)
 
-        total_steps = self.num_epochs * self.batch_size
+        total_steps = self.num_epochs * len(train_dataloader) / self.batch_size
         scheduler = get_linear_schedule_with_warmup(optimizer,
-                                                    num_warmup_steps=0,
+                                                    num_warmup_steps=1000,
                                                     num_training_steps=total_steps)
 
-        train_dataloader, val_dataloader = self.pepare_data_loader()
-
-        for epoch in range(self.num_epochs):
+        for epoch in range(num_epochs):
             print(f'======== Epoch {epoch + 1} / {self.num_epochs} ========')
             t0 = time.time()
             total_train_loss = 0
@@ -87,10 +88,9 @@ class IrEsBaseBertTrainer(Trainer):
                 input_token_type_ids = questions_queries_collection["token_type_ids"]
                 input_attention_mask = questions_queries_collection["attention_mask"]
 
-                output = self.reader.model(input_ids=input_ids.to(device),
-                                           attention_mask=input_attention_mask.to(
-                                               device),
-                                           token_type_ids=input_token_type_ids.to(device))
+                output = self.reader.model(input_ids=input_ids,
+                                           attention_mask=input_attention_mask,
+                                           token_type_ids=input_token_type_ids)
 
                 loss = criterion(output, answers_indexes.to(device))
                 if self.num_gpus > 1:
@@ -119,7 +119,6 @@ class IrEsBaseBertTrainer(Trainer):
             print("")
             print("  Average training loss: {0:.4f}".format(avg_train_loss))
             print("  Training epoch took: {:}".format(training_time))
-
             # ========================================
             #               Validation
             # ========================================

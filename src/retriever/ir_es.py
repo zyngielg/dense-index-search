@@ -66,7 +66,7 @@ class IR_ES(Retriever):
                                   index_name=self.index_name,
                                   index_body=create_index_body)
 
-    def create_tokenized_input(self, questions, tokenizer, train_set):
+    def create_tokenized_input(self, questions, tokenizer, docs_flag, num_questions):
         def letter_answer_to_index(answer):
             return ord(answer) - 65
 
@@ -75,7 +75,8 @@ class IR_ES(Retriever):
         input_answers_idx = []
 
         for question_id, question_data in tqdm(questions.items()):
-            question = question_data['question']
+            if int(question_id[1:]) == num_questions:
+                break
             metamap_phrases = question_data['metamap_phrases']
 
             input_ids = []
@@ -83,19 +84,27 @@ class IR_ES(Retriever):
             attention_masks = []
 
             for option in question_data['options'].values():
-                qa_retrieval = ' '.join(metamap_phrases) + ' ' + option
-                qa_inference = f"{question} {option}"
+                medqa_string = ' '.join(metamap_phrases) + ' ' + option
+                query = f"{option} {medqa_string}"
 
                 _, retrieved_documents = self.retrieve_documents(
-                    query=qa_retrieval, question_id=question_id, option=option.strip().lower(), train=train_set)
+                    query=query,
+                    question_id=question_id,
+                    option=option,
+                    retrieved_docs_flag=docs_flag)
 
+                query = f"[A] {option} [Q] {medqa_string}"
                 context = ' '.join(retrieved_documents)
-                query = tokenizer(context, qa_inference, add_special_tokens=True,
-                                  max_length=512, padding='max_length', truncation=True, return_tensors="pt")
-                input_ids.append(query["input_ids"].flatten())
+                test = tokenizer(query, context, add_special_tokens=True, max_length=512, padding='max_length', truncation=True, return_tensors="pt")
+                test_two = tokenizer.decode(test['input_ids'][0])
+                query_tokenized = tokenizer(query, context, add_special_tokens=True,
+                                            max_length=512, padding='max_length', truncation=True, return_tensors="pt")
+                input_ids.append(query_tokenized["input_ids"].flatten())
                 # decoded = tokenizer.decode(query_input_ids)
-                token_type_ids.append(query["token_type_ids"].flatten())
-                attention_masks.append(query["attention_mask"].flatten())
+                token_type_ids.append(
+                    query_tokenized["token_type_ids"].flatten())
+                attention_masks.append(
+                    query_tokenized["attention_mask"].flatten())
 
             tensor_input_ids = torch.stack(input_ids, dim=0)
             tensor_token_type_ids = torch.stack(token_type_ids, dim=0)
@@ -130,6 +139,7 @@ class IR_ES(Retriever):
                 retrieved_docs_set = self.val_retrieved_documents
             # else:
                 # retrieved_docs_set = self.test_retrieved_documents
+            x = retrieved_docs_set[question_id]['retrieved_documents']
             retrieved_documents = retrieved_docs_set[question_id]['retrieved_documents'][option]
         retrieved_documents_content = [
             x['evidence']['content'] for x in retrieved_documents]

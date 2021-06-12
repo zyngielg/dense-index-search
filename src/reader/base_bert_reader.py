@@ -14,7 +14,7 @@ class Base_BERT_Reader(Reader):
     # weights_file_name = "2021-04-30_16:08:19 reader IRES retriever BERT_linear.pth"
     weights_file_name = ""
     weights_file_path = f"{weights_file_directory}/{weights_file_name}"
-    layers_to_not_freeze = ['9', '10', '11', 'linear', 'pooler']  
+    layers_to_not_freeze = ['7', '8', '9', '10', '11', 'linear', 'pooler']  
 
     def __init__(self, load_weights=False):
         self.load_weights = load_weights
@@ -32,6 +32,8 @@ class Base_BERT_Reader(Reader):
         self.freeze_layers()
         self.model.to(self.device)
         self.tokenizer = AutoTokenizer.from_pretrained(self.bert_name)
+        self.question_token = self.tokenizer.convert_tokens_to_ids('[unused1]')
+        self.answer_token = self.tokenizer.convert_tokens_to_ids('[unused2]')
         self.softmax = torch.nn.Softmax(dim=1)
 
     def choose_answer(self, query, context, question_data):
