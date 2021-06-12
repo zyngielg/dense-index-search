@@ -5,7 +5,6 @@ from enum import Enum
 from nltk import FreqDist, ngrams, word_tokenize
 from numpy import mean
 
-
 class Indexes(Enum):
     MedQA_chunks_100 = "medqa-chunks-100"
     MedQA_chunks_50 = "medqa-chunks-50"
@@ -110,3 +109,5 @@ def ir_es_custom_score(documents, query, avg_query_len, avg_doc_len):
         score += nominator / denominator
 
     return score
+
+

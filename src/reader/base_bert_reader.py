@@ -14,7 +14,7 @@ class Base_BERT_Reader(Reader):
     # weights_file_name = "2021-04-30_16:08:19 reader IRES retriever BERT_linear.pth"
     weights_file_name = ""
     weights_file_path = f"{weights_file_directory}/{weights_file_name}"
-    layers_to_not_freeze = ['9', '10', '11', 'linear', 'pooler']  
+    layers_to_not_freeze = ['7', '8', '9', '10', '11', 'linear', 'pooler']  
 
     def __init__(self, load_weights=False):
         self.load_weights = load_weights
