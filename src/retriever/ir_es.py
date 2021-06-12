@@ -2,7 +2,8 @@ import numpy as np
 import torch
 import utils.es_utils as es_utils
 import utils.pickle_utils as pickle_utils
-
+import json
+import datetime
 from elasticsearch import Elasticsearch
 from retriever.retriever import Retriever
 from tqdm import tqdm
@@ -11,13 +12,13 @@ from tqdm import tqdm
 class IR_ES(Retriever):
     stemmed = True
 
-    index_name = es_utils.Indexes.MedQA_chunks_50.value
-    num_of_documents_to_retrieve = 20
+    index_name = es_utils.Indexes.MedQA_chunks_100.value
+    num_of_documents_to_retrieve = 10
     host = ['http://localhost']
     port = '9200'
 
-    retrieved_documents_train_path = "data/es-retrieved-documents/es_retrieved_documents_train_chunks_50_questions_unprocessed.pickle"
-    retrieved_documents_val_path = "data/es-retrieved-documents/es_retrieved_documents_val_chunks_50_questions_unprocessed.pickle"
+    retrieved_documents_train_path = "data/es-retrieved-documents/final_es_retrieved_documents_train_chunks_100_unprocessed.pickle"
+    retrieved_documents_val_path = "data/es-retrieved-documents/final_es_retrieved_documents_val_chunks_100_unprocessed.pickle"
 
     def __init__(self, from_es_session=False):
         self.from_es_session = from_es_session
@@ -28,13 +29,14 @@ class IR_ES(Retriever):
         if not self.from_es_session:
             info['train searches loaded from'] = self.retrieved_documents_train_path
             info['val searches loaded from'] = self.retrieved_documents_val_path
+        else:
+            info['index name'] = self.index_name
         info['num of docs retrieved'] = self.num_of_documents_to_retrieve
-        info['index name'] = self.index_name
 
         return info
 
     def prepare_retriever(self, corpus=None, create_encodings=None, create_index=None):
-        if self.from_es_session is True:
+        if self.from_es_session:
             self.es = Elasticsearch(hosts=self.host, port=self.port)
             if not self.es.ping():
                 raise ValueError(
@@ -111,7 +113,7 @@ class IR_ES(Retriever):
 
         return input_queries, input_answers, input_answers_idx
 
-    def retrieve_documents(self, query=None, question_id=None, option=None, train=False):
+    def retrieve_documents(self, query=None, question_id=None, option=None, retrieved_docs_flag=0):
         retrieved_documents = None
         retrieved_documents_content = None
 
@@ -122,12 +124,13 @@ class IR_ES(Retriever):
                                                             index_name=self.index_name,
                                                             stemmed=self.stemmed)
         else:
-            if train:
-                retrieved_documents = self.train_retrieved_documents[
-                    question_id]['retrieved_documents'][option]
-            else:
-                retrieved_documents = self.val_retrieved_documents[
-                    question_id]['retrieved_documents'][option]
+            if retrieved_docs_flag == 0:
+                retrieved_docs_set = self.train_retrieved_documents
+            elif retrieved_docs_flag == 1:
+                retrieved_docs_set = self.val_retrieved_documents
+            # else:
+                # retrieved_docs_set = self.test_retrieved_documents
+            retrieved_documents = retrieved_docs_set[question_id]['retrieved_documents'][option]
         retrieved_documents_content = [
             x['evidence']['content'] for x in retrieved_documents]
         return retrieved_documents, retrieved_documents_content
@@ -135,11 +138,22 @@ class IR_ES(Retriever):
     def __calculate_score(self, retrieved_documents):
         return np.sum([doc['score'] for doc in retrieved_documents])
 
-    def run_ir_es_e2e(self, questions):
+    def save_results(self, train_results, val_results):
+        results = {
+            "info": self.get_info(),
+            "results": [train_results, val_results]
+        }
+        now = datetime.datetime.now()
+        dt_string = now.strftime("%Y-%m-%d_%H:%M:%S")
+        results_file = f"src/trainer/results/{dt_string}__IR-ES_e2e_stats.json"
+        with open(results_file, 'w') as results_file:
+            json.dump(results, results_file)
+
+    def run_ir_es_e2e(self, questions, doc_flag=0):
         correct_answer = 0
         incorrect_answer = 0
 
-        for question_data in tqdm(questions.values()):
+        for q_id, question_data in tqdm(questions.items()):
             question = question_data['question']
             answer = question_data['answer']
 
@@ -147,9 +161,13 @@ class IR_ES(Retriever):
             final_score = 0
 
             for option_answer in question_data['options'].values():
-                # query = ' '.join(question_data['metamap_phrases']) + " " + option_answer
-                query = question + " " + option_answer
-                top_documents, _ = self.retrieve_documents(query)
+                metamap_string = ' '.join(question_data['metamap_phrases'])
+                query = f"{option_answer} {metamap_string}"
+                top_documents, _ = self.retrieve_documents(
+                    query=query.lower(),
+                    question_id=q_id,
+                    retrieved_docs_flag=doc_flag,
+                    option=option_answer)
                 if top_documents != []:
                     score = self.__calculate_score(top_documents)
                     if final_score < score:
@@ -161,7 +179,14 @@ class IR_ES(Retriever):
             else:
                 incorrect_answer += 1
 
-        print(
-            f'Accuracy: {100 * correct_answer / (correct_answer + incorrect_answer)}%')
+        accuracy = 100 * correct_answer / (correct_answer + incorrect_answer)
+        results = {
+            "Accuracy": accuracy,
+            "# correct": correct_answer,
+            "# incorrect": incorrect_answer
+        }
+        print(f'Accuracy: {accuracy}%')
         print(f'\tCorrect answers: {correct_answer}')
         print(f'\tInorrect answers: {incorrect_answer}')
+
+        return results

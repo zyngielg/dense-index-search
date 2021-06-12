@@ -27,13 +27,16 @@ def parse_arguments():
 
 
 def qa(questions, retriever: Retriever, reader: Reader):
-    if type(retriever) == IR_ES:
-        retriever.__class__ = IR_ES
-        if reader == None:
-            print('Running IR-ES module e2e (val set)')
-            retriever.run_ir_es_e2e(questions.questions_val)
+    if type(retriever) == IR_ES:        
+        if reader == None:            
+            print('********* Running IR-ES module e2e *********')
+            print("****** Training set ******")
+            train_res = retriever.run_ir_es_e2e(questions.questions_train, doc_flag=0)
+            print("****** Validation set ******")
+            val_res = retriever.run_ir_es_e2e(questions=questions.questions_val, doc_flag=1)
+            retriever.save_results(train_res, val_res)
         elif type(reader) == Base_BERT_Reader:
-            print('nice')
+            pass
 
 
 if __name__ == "__main__":
@@ -48,8 +51,7 @@ if __name__ == "__main__":
     reader = retriever_reader_factory.create_reader()
 
     if args.mode == "QA":
-        qa(questions=medqa_questions.questions_dev,
-           retriever=retriever, reader=reader)
+        qa(questions=medqa_questions, retriever=retriever, reader=reader)
     elif args.mode == "TRAINING":
         trainer_factory = TrainerFactory(retriever=retriever, reader=reader,
                                          questions=medqa_questions, num_epochs=num_epochs, batch_size=batch_size, lr=lr)
