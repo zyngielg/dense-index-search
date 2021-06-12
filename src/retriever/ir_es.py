@@ -87,7 +87,7 @@ class IR_ES(Retriever):
             attention_masks = []
 
             for option in question_data['options'].values():
-                medqa_string = ' '.join(metamap_phrases) + ' ' + option
+                medqa_string = ' '.join(metamap_phrases)
                 query = f"{option} {medqa_string}"
 
                 _, retrieved_documents = self.retrieve_documents(
@@ -96,17 +96,17 @@ class IR_ES(Retriever):
                     option=option,
                     retrieved_docs_flag=docs_flag)
 
-                option = "testing one tow dsa"
-                query = f". {option} . {medqa_string}"
-                tokenized_option = tokenizer(option, add_special_tokens=False)
+                query = f"{medqa_string} . {option}"
+                tokenized_option_len = len(tokenizer(option, add_special_tokens=False)['input_ids'])
+                tokenized_question_len = len(tokenizer(medqa_string, add_special_tokens=False)['input_ids'])
+
                 context = ' '.join(retrieved_documents)
                 query_tokenized = tokenizer(query, context, add_special_tokens=True,
                                             max_length=512, padding='max_length', truncation=True, return_tensors="pt")
-                query_tokenized['input_ids'][:, 1] = answer_token_id
-                query_tokenized['input_ids'][:, (len(
-                    tokenized_option['input_ids']) + 2)] = question_token_id
+                query_tokenized['input_ids'][:, 1 + tokenized_question_len] = answer_token_id
+                # query_tokenized['input_ids'][:, -(3+tokenized_question_len + tokenized_option_len)] = question_token_id
+
                 input_ids.append(query_tokenized["input_ids"].flatten())
-                # decoded = tokenizer.decode(query_input_ids)
                 token_type_ids.append(
                     query_tokenized["token_type_ids"].flatten())
                 attention_masks.append(

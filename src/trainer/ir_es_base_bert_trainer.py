@@ -75,9 +75,9 @@ class IrEsBaseBertTrainer(Trainer):
         for epoch in range(num_epochs):
             print(f'========= Epoch {epoch + 1} / {self.num_epochs} =========')
             t0 = time.time()
-            total_train_loss = 0
-            self.reader.model.train()
             print("****** Training ******")
+            self.reader.model.train()
+            total_train_loss = 0
             for step, batch in enumerate(train_dataloader):
                 if step % 25 == 0 and not step == 0:
                     elapsed = self.format_time(time.time() - t0)
