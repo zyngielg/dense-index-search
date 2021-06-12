@@ -67,6 +67,9 @@ class IR_ES(Retriever):
                                   index_body=create_index_body)
 
     def create_tokenized_input(self, questions, tokenizer, docs_flag, num_questions):
+        question_token_id = tokenizer.convert_tokens_to_ids('[unused5]')
+        answer_token_id = tokenizer.convert_tokens_to_ids('[unused6]')
+
         def letter_answer_to_index(answer):
             return ord(answer) - 65
 
@@ -93,12 +96,15 @@ class IR_ES(Retriever):
                     option=option,
                     retrieved_docs_flag=docs_flag)
 
-                query = f"[A] {option} [Q] {medqa_string}"
+                option = "testing one tow dsa"
+                query = f". {option} . {medqa_string}"
+                tokenized_option = tokenizer(option, add_special_tokens=False)
                 context = ' '.join(retrieved_documents)
-                test = tokenizer(query, context, add_special_tokens=True, max_length=512, padding='max_length', truncation=True, return_tensors="pt")
-                test_two = tokenizer.decode(test['input_ids'][0])
                 query_tokenized = tokenizer(query, context, add_special_tokens=True,
                                             max_length=512, padding='max_length', truncation=True, return_tensors="pt")
+                query_tokenized['input_ids'][:, 1] = answer_token_id
+                query_tokenized['input_ids'][:, (len(
+                    tokenized_option['input_ids']) + 2)] = question_token_id
                 input_ids.append(query_tokenized["input_ids"].flatten())
                 # decoded = tokenizer.decode(query_input_ids)
                 token_type_ids.append(
@@ -155,7 +161,7 @@ class IR_ES(Retriever):
         }
         now = datetime.datetime.now()
         dt_string = now.strftime("%Y-%m-%d_%H:%M:%S")
-        results_file = f"src/trainer/results/{dt_string}__IR-ES_e2e_stats.json"
+        results_file = f"src/results/ir-es-based/{dt_string}__IR-ES__e2e.json"
         with open(results_file, 'w') as results_file:
             json.dump(results, results_file)
 

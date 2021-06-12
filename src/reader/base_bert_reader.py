@@ -32,8 +32,6 @@ class Base_BERT_Reader(Reader):
         self.freeze_layers()
         self.model.to(self.device)
         self.tokenizer = AutoTokenizer.from_pretrained(self.bert_name)
-        self.question_token = self.tokenizer.convert_tokens_to_ids('[unused1]')
-        self.answer_token = self.tokenizer.convert_tokens_to_ids('[unused2]')
         self.softmax = torch.nn.Softmax(dim=1)
 
     def choose_answer(self, query, context, question_data):

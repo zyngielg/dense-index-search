@@ -22,23 +22,28 @@ class IrEsBaseBertTrainer(Trainer):
         super().__init__(questions, retriever, reader, num_epochs, batch_size, lr)
 
     def pepare_data_loader(self):
-        # print("******** Creating train dataloader ********")
-        # train_input_queries, train_input_answers, train_input_answers_idx = self.retriever.create_tokenized_input(
-        #     questions=self.questions_train, tokenizer=self.reader.tokenizer, docs_flag=0)
+        print("********* Creating train dataloader ... *********")
+        train_input_queries, train_input_answers, train_input_answers_idx = self.retriever.create_tokenized_input(
+            questions=self.questions_train,
+            tokenizer=self.reader.tokenizer,
+            docs_flag=0,
+            num_questions=len(self.questions_train))
 
-        # train_dataloader = create_medqa_data_loader(input_queries=train_input_queries, input_answers=train_input_answers,
-        #                                             input_answers_idx=train_input_answers_idx, batch_size=self.batch_size)
-        # print("******** Train dataloader created  ********")
+        train_dataloader = create_medqa_data_loader(input_queries=train_input_queries, input_answers=train_input_answers,
+                                                    input_answers_idx=train_input_answers_idx, batch_size=self.batch_size)
+        print("********* ... train dataloader created  *********")
 
-        print("******** Creating val dataloader ********")
+        print("********* Creating val dataloader ... *********")
 
         val_input_queries, val_input_answers, val_input_answers_idx = self.retriever.create_tokenized_input(
-            questions=self.questions_val, tokenizer=self.reader.tokenizer, docs_flag=1, num_questions=len(self.questions_val))
+            questions=self.questions_val,
+            tokenizer=self.reader.tokenizer,
+            docs_flag=1,
+            num_questions=len(self.questions_val))
         val_dataloader = create_medqa_data_loader(input_queries=val_input_queries, input_answers=val_input_answers,
                                                   input_answers_idx=val_input_answers_idx, batch_size=self.batch_size)
-        print("******** Val dataloader created  ********")
-        # return train_dataloader, val_dataloader
-        return val_dataloader, val_dataloader
+        print("********* ... val dataloader created  *********")
+        return train_dataloader, val_dataloader
 
     def train(self):
         super().train()
@@ -56,7 +61,7 @@ class IrEsBaseBertTrainer(Trainer):
             "total_training_time": None,
             "training_stats": []
         }
-        num_epochs = 10  # self.num_epochs
+        num_epochs = self.num_epochs
         train_dataloader, val_dataloader = self.pepare_data_loader()
         criterion = torch.nn.CrossEntropyLoss()
         optimizer = torch.optim.AdamW(
@@ -68,10 +73,11 @@ class IrEsBaseBertTrainer(Trainer):
                                                     num_training_steps=total_steps)
 
         for epoch in range(num_epochs):
-            print(f'======== Epoch {epoch + 1} / {self.num_epochs} ========')
+            print(f'========= Epoch {epoch + 1} / {self.num_epochs} =========')
             t0 = time.time()
             total_train_loss = 0
             self.reader.model.train()
+            print("****** Training ******")
             for step, batch in enumerate(train_dataloader):
                 if step % 25 == 0 and not step == 0:
                     elapsed = self.format_time(time.time() - t0)
@@ -97,17 +103,11 @@ class IrEsBaseBertTrainer(Trainer):
                     loss = loss.mean()
                 total_train_loss += loss.item()
                 loss.backward()
-                # Clip the norm of the gradients to 1.0.
-                # This is to help prevent the "exploding gradients" problem.
+
                 torch.nn.utils.clip_grad_norm_(
                     self.reader.model.parameters(), 1.0)
 
-                # Update parameters and take a step using the computed gradient.
-                # The optimizer dictates the "update rule"--how the parameters are
-                # modified based on their gradients, the learning rate, etc.
                 optimizer.step()
-
-                # Update the learning rate.
                 scheduler.step()
 
             # Calculate the average loss over all of the batches.
@@ -116,13 +116,10 @@ class IrEsBaseBertTrainer(Trainer):
             # Measure how long this epoch took.
             training_time = self.format_time(time.time() - t0)
 
-            print("")
-            print("  Average training loss: {0:.4f}".format(avg_train_loss))
-            print("  Training epoch took: {:}".format(training_time))
-            # ========================================
-            #               Validation
-            # ========================================
-            print("Running Validation...")
+            print("\tAverage training loss: {0:.4f}".format(avg_train_loss))
+            print("\tTraining epoch took: {:}".format(training_time))
+
+            print("****** Validation ******")
 
             t0 = time.time()
 
@@ -168,7 +165,7 @@ class IrEsBaseBertTrainer(Trainer):
 
             # Report the final accuracy for this validation run.
             avg_val_accuracy = total_eval_accuracy / len(val_dataloader)
-            print("  Accuracy: {0:.4f}".format(avg_val_accuracy))
+            print("\tAccuracy: {0:.4f}".format(avg_val_accuracy))
 
             # Calculate the average loss over all of the batches.
             avg_val_loss = total_eval_loss / len(val_dataloader)
@@ -191,8 +188,7 @@ class IrEsBaseBertTrainer(Trainer):
                 }
             )
 
-        print("")
-        print("Training complete!")
+        print("********* Training complete *********")
         total_training_time = self.format_time(time.time()-total_t0)
         training_info['total_training_time'] = total_training_time
         print(f"Total training took {training_time} (h:mm:ss)")
@@ -200,11 +196,11 @@ class IrEsBaseBertTrainer(Trainer):
         now = datetime.datetime.now()
         dt_string = now.strftime("%Y-%m-%d_%H:%M:%S")
         # saving training stats
-        training_stats_file = f"src/trainer/results/{dt_string}__training_stats.json"
+        training_stats_file = f"src/results/ir-es-based/{dt_string}__IR-ES__base-BERT.json"
         with open(training_stats_file, 'w') as results_file:
             json.dump(training_info, results_file)
         # saving the reader weights
-        reader_file_name = f"src/trainer/results/{dt_string}__IRES+base_BERT__reader.pth"
+        reader_file_name = f"src/results/ir-es-based/{dt_string}__IR-ES__base-BERT.pth"
         torch.save(self.reader.model.state_dict(), reader_file_name)
         print(f"Reader weights saved in {reader_file_name}")
         print("***** Training completed *****")
