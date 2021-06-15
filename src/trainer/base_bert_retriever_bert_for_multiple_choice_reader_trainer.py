@@ -7,26 +7,25 @@ import torch
 
 from data.data_loader import create_questions_data_loader
 from data.medqa_questions import MedQAQuestions
-from reader.reader import Reader
-from retriever.REALM_like_retriever import REALM_like_retriever
+from reader.bert_for_multiple_choice_reader import BERT_multiple_choice_reader
+from retriever.base_bert_retriever import BaseBertRetriever
 from trainer.trainer import Trainer
 from transformers import get_linear_schedule_with_warmup
-from utils.general_utils import remove_duplicates_preserve_order
 
 
-class REALM_like_retriever_base_BERT_reader_trainer(Trainer):
-    def __init__(self, questions: MedQAQuestions, retriever: REALM_like_retriever, reader: Reader, num_epochs: int, batch_size: int, lr: float) -> None:
+class BaseBERTRetrieverBERTForMultipleChoiceReaderTrainer(Trainer):
+    def __init__(self, questions: MedQAQuestions, retriever: BaseBertRetriever, reader: BERT_multiple_choice_reader, num_epochs: int, batch_size: int, lr: float) -> None:
         super().__init__(questions, retriever, reader, num_epochs, batch_size, lr)
 
     def pepare_data_loader(self):
         print("******** Creating train dataloader ********")
         train_dataloader = create_questions_data_loader(
-            questions=self.questions_train, batch_size=self.batch_size, num_questions=len(self.questions_train))
+            questions=self.questions_train, tokenizer=self.retriever.tokenizer, batch_size=self.batch_size)
         print("******** Train dataloader created  ********")
 
         print("******** Creating val dataloader ********")
         val_dataloader = create_questions_data_loader(
-            questions=self.questions_val, batch_size=self.batch_size, num_questions=len(self.questions_train))
+            questions=self.questions_val, tokenizer=self.retriever.tokenizer, batch_size=self.batch_size)
         print("******** Val dataloader created  ********")
 
         return train_dataloader, val_dataloader
@@ -50,7 +49,6 @@ class REALM_like_retriever_base_BERT_reader_trainer(Trainer):
             "training_stats": []
         }
 
-        criterion = torch.nn.CrossEntropyLoss()
         params = list(self.retriever.q_encoder.parameters()) + \
             list(self.reader.model.parameters())
         optimizer = torch.optim.AdamW(params, lr=self.lr)
@@ -79,21 +77,17 @@ class REALM_like_retriever_base_BERT_reader_trainer(Trainer):
                 # self.retriever.q_encoder.zero_grad()
 
                 questions = batch[0]
-                answers = batch[1]
                 answers_indexes = batch[2]
-                options = [x.split('#') for x in batch[3]]
-                metamap_phrases = [x.split('#') for x in batch[4]]
+                options = batch[3]
+                metamap_phrases = batch[4]
 
                 input_ids = []
                 token_type_ids = []
                 attention_masks = []
 
                 for q_idx in range(len(questions)):
-                    metamap_phrases[q_idx] = remove_duplicates_preserve_order(metamap_phrases[q_idx])
                     query = ' '.join(metamap_phrases[q_idx])
-                    # or
-                    # query = questions[q_idx]
-                    query_options = [query + ' ' + x for x in options[q_idx]]
+                    query_options = [query + ' ' + x[q_idx] for x in options]
                     retrieved_documents = [
                         self.retriever.retrieve_documents(x) for x in query_options]
 
@@ -104,8 +98,12 @@ class REALM_like_retriever_base_BERT_reader_trainer(Trainer):
                             option_documents.append(document['content'])
                         contexts.append(' '.join(option_documents))
 
-                    question_inputs = self.retriever.tokenizer(
-                        query_options, contexts, add_special_tokens=True, max_length=512, padding='max_length', truncation=True, return_tensors="pt")
+                    question_inputs = self.retriever.tokenizer(query_options, contexts,
+                                                               add_special_tokens=True,
+                                                               max_length=512,
+                                                               padding='max_length',
+                                                               truncation=True,
+                                                               return_tensors="pt")
                     input_ids.append(question_inputs['input_ids'])
                     token_type_ids.append(question_inputs['token_type_ids'])
                     attention_masks.append(question_inputs['attention_mask'])
@@ -114,25 +112,24 @@ class REALM_like_retriever_base_BERT_reader_trainer(Trainer):
                 tensor_token_type_ids = torch.stack(token_type_ids, dim=0)
                 tensor_attention_masks = torch.stack(attention_masks, dim=0)
 
-                output = self.reader.model(
-                    input_ids=tensor_input_ids.to(device), attention_mask=tensor_token_type_ids.to(device), token_type_ids=tensor_attention_masks.to(device))
+                outputs = self.reader.model(input_ids=tensor_input_ids.to(device),
+                                            attention_mask=tensor_token_type_ids.to(
+                                                device),
+                                            token_type_ids=tensor_attention_masks.to(
+                                                device),
+                                            labels=answers_indexes.to(device))
+                # loss [0] and classification scores [1], potential TODO: check if the Base_BERT_reader returns same valuess
+                loss = outputs[0]
 
-                loss = criterion(output, answers_indexes.to(device))
                 if self.num_gpus > 1:
                     loss = loss.mean()
                 total_train_loss += loss.item()
                 loss.backward()
-                # Clip the norm of the gradients to 1.0.
-                # This is to help prevent the "exploding gradients" problem.
-                # torch.nn.utils.clip_grad_norm_(
-                #     self.reader.model.parameters(), 1.0)
 
-                # Update parameters and take a step using the computed gradient.
-                # The optimizer dictates the "update rule"--how the parameters are
-                # modified based on their gradients, the learning rate, etc.
+                torch.nn.utils.clip_grad_norm_(
+                    self.reader.model.parameters(), 1.0)
                 optimizer.step()
 
-                # Update the learning rate.
                 scheduler.step()
 
             # Calculate the average loss over all of the batches.
@@ -166,22 +163,19 @@ class REALM_like_retriever_base_BERT_reader_trainer(Trainer):
                 if step % 25 == 0 and not step == 0:
                     elapsed = self.format_time(time.time() - t0)
                     print(
-                        f'Batch {step} of {len(train_dataloader)}. Elapsed: {elapsed}')
+                        f'Batch {step} of {len(val_dataloader)}. Elapsed: {elapsed}')
                 questions = batch[0]
                 answers_indexes = batch[2]
-                options = [x.split('#') for x in batch[3]]
-                metamap_phrases = [x.split('#') for x in batch[4]]
+                options = batch[3]
+                metamap_phrases = batch[4]
 
                 input_ids = []
                 token_type_ids = []
                 attention_masks = []
 
                 for q_idx in range(len(questions)):
-                    metamap_phrases[q_idx] = remove_duplicates_preserve_order(metamap_phrases[q_idx])
                     query = ' '.join(metamap_phrases[q_idx])
-                    # or
-                    # query = questions[q_idx]
-                    query_options = [query + ' ' + x for x in options[q_idx]]
+                    query_options = [query + ' ' + x[q_idx] for x in options]
                     retrieved_documents = [
                         self.retriever.retrieve_documents(x) for x in query_options]
 
@@ -192,8 +186,12 @@ class REALM_like_retriever_base_BERT_reader_trainer(Trainer):
                             option_documents.append(document['content'])
                         contexts.append(' '.join(option_documents))
 
-                    question_inputs = self.retriever.tokenizer(
-                        query_options, contexts, add_special_tokens=True, max_length=512, padding='max_length', truncation=True, return_tensors="pt")
+                    question_inputs = self.retriever.tokenizer(query_options, contexts,
+                                                               add_special_tokens=True,
+                                                               max_length=512,
+                                                               padding='max_length',
+                                                               truncation=True,
+                                                               return_tensors="pt")
                     input_ids.append(question_inputs['input_ids'])
                     token_type_ids.append(question_inputs['token_type_ids'])
                     attention_masks.append(question_inputs['attention_mask'])
@@ -202,9 +200,13 @@ class REALM_like_retriever_base_BERT_reader_trainer(Trainer):
                 tensor_token_type_ids = torch.stack(token_type_ids, dim=0)
                 tensor_attention_masks = torch.stack(attention_masks, dim=0)
                 with torch.no_grad():
-                    output = self.reader.model(
-                        input_ids=tensor_input_ids.to(device), attention_mask=tensor_token_type_ids.to(device), token_type_ids=tensor_attention_masks.to(device))
-                loss = criterion(output, answers_indexes.to(device))
+                    outputs = self.reader.model(input_ids=tensor_input_ids.to(device),
+                                                attention_mask=tensor_token_type_ids.to(
+                                                    device),
+                                                token_type_ids=tensor_attention_masks.to(
+                                                    device),
+                                                labels=answers_indexes.to(device))
+                loss, classification_scores = outputs[:2]
                 if self.num_gpus > 1:
                     loss = loss.mean()
                 # Accumulate the validation loss.
@@ -212,13 +214,13 @@ class REALM_like_retriever_base_BERT_reader_trainer(Trainer):
 
                 # Move logits and labels to CPU
                 if device.type == 'cpu':
-                    output = output.numpy()
+                    classification_scores = classification_scores.numpy()
                     answers_indexes = answers_indexes.numpy()
                 else:
-                    output = output.detach().cpu().numpy()
+                    classification_scores = classification_scores.detach().cpu().numpy()
                     answers_indexes = answers_indexes.to('cpu').numpy()
                 total_eval_accuracy += self.calculate_accuracy(
-                    output, answers_indexes)
+                    classification_scores, answers_indexes)
 
             # Report the final accuracy for this validation run.
             avg_val_accuracy = total_eval_accuracy / len(val_dataloader)

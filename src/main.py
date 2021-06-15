@@ -17,10 +17,9 @@ def parse_arguments():
     parser = argparse.ArgumentParser()
     parser.add_argument(
         'mode', help="Choose mode. Possible options: TRAINING, QA")
+    parser.add_argument("--questions_filtered", dest='questions_filtered', default=False, action='store_true')
     parser.add_argument(
-        "corpus", help="Choose dataset used as the context corpus. Possible options: MedQA, FindZebra")
-    parser.add_argument(
-        'retriever', help="Choose retriever to be used. Possible options: IR-ES, REALM-like")
+        'retriever', help="Choose retriever to be used. Possible options: IR-ES, Base-BERT, REALM-like")
     parser.add_argument(
         'reader', help="Choose reader to be used. Possible options: Base-BERT, BERT-for-multiple-choice")
     return parser.parse_args()
@@ -39,7 +38,7 @@ def qa(questions, retriever: Retriever, reader: Reader):
             pass
 
 
-if __name__ == "__main__":
+if __name__ == "__main__":    
     args = parse_arguments()
     medqa_questions = MedQAQuestions(stemming=False)
     medqa_corpus = MedQACorpus(stemming=False)

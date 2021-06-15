@@ -1,17 +1,19 @@
 from data.medqa_questions import MedQAQuestions
+from retriever.base_bert_retriever import BaseBertRetriever
 from retriever.colbert.ColBERT_retriever import ColBERT_retriever
-from reader.bert_for_multiple_choice_reader import BERT_multiple_choice_reader
-from retriever.retriever import Retriever
 from retriever.ir_es import IR_ES
-from retriever.REALM_like_retriever import REALM_like_retriever
-from reader.reader import Reader
+from retriever.realm_like_retriever import REALMLikeRetriever
+from retriever.retriever import Retriever
 from reader.base_bert_reader import Base_BERT_Reader
-from trainer.trainer import Trainer
-from trainer.REALM_like_retriever_base_BERT_reader_trainer import REALM_like_retriever_base_BERT_reader_trainer
-from trainer.ir_es_base_bert_trainer import IrEsBaseBertTrainer
-from trainer.ColBERT_retriever_Base_BERT_reader_trainer import ColBERT_retriever_Base_BERT_reader_trainer
-from trainer.REAL_like_retriever_BERT_for_multiple_choice_reader_trainer import REALM_like_retriever_BERT_for_multiple_choice_reader_trainer
+from reader.bert_for_multiple_choice_reader import BERT_multiple_choice_reader
+from reader.reader import Reader
 from trainer.ColBERT_e2e_trainer import ColBERT_e2e_trainer
+from trainer.ColBERT_retriever_Base_BERT_reader_trainer import ColBERT_retriever_Base_BERT_reader_trainer
+from trainer.base_bert_retriever_base_bert_reader_trainer import BaseBERTRetrieverBaseBERTReaderTrainer
+from trainer.base_bert_retriever_bert_for_multiple_choice_reader_trainer import BaseBERTRetrieverBERTForMultipleChoiceReaderTrainer
+from trainer.ir_es_base_bert_trainer import IrEsBaseBertTrainer
+from trainer.realm_like_retriever_base_bert_reader_trainer import REALMLikeRetrieverBaseBERTReaderTrainer
+from trainer.trainer import Trainer
 
 
 class ReaderRetrieverFactory():
@@ -27,8 +29,10 @@ class ReaderRetrieverFactory():
 
         if self.retriever_choice == "IR-ES":
             retriever = IR_ES(from_es_session=self.from_es_session)
+        elif self.retriever_choice == "Base-BERT":
+            retriever = BaseBertRetriever(load_weights=self.load_weights)
         elif self.retriever_choice == "REALM-like":
-            retriever = REALM_like_retriever(load_weights=self.load_weights)
+            retriever = REALMLikeRetriever(load_weights=self.load_weights)
         elif self.retriever_choice == "ColBERT":
             retriever = ColBERT_retriever(load_weights=True)
 
@@ -70,13 +74,16 @@ class TrainerFactory():
         if type(self.retriever) == IR_ES and type(self.reader) == Base_BERT_Reader:
             trainer = IrEsBaseBertTrainer(
                 self.questions, self.retriever, self.reader, self.num_epochs, self.batch_size, self.lr)
-        elif type(self.retriever) == REALM_like_retriever:
+        elif type(self.retriever) == BaseBertRetriever:
             if type(self.reader) == Base_BERT_Reader:
-                trainer = REALM_like_retriever_base_BERT_reader_trainer(
+                trainer = BaseBERTRetrieverBaseBERTReaderTrainer(
                     self.questions, self.retriever, self.reader, self.num_epochs, self.batch_size, self.lr)
             elif type(self.reader) == BERT_multiple_choice_reader:
-                trainer = REALM_like_retriever_BERT_for_multiple_choice_reader_trainer(
+                trainer = BaseBERTRetrieverBERTForMultipleChoiceReaderTrainer(
                     self.questions, self.retriever, self.reader, self.num_epochs, self.batch_size, self.lr)
+        elif type(self.retriever) == REALMLikeRetriever:
+            trainer = REALMLikeRetrieverBaseBERTReaderTrainer(
+                self.questions, self.retriever, self.reader, self.num_epochs, self.batch_size, self.lr)
         elif type(self.retriever) == ColBERT_retriever:
             if type(self.reader) == Base_BERT_Reader:
                 trainer = ColBERT_retriever_Base_BERT_reader_trainer(

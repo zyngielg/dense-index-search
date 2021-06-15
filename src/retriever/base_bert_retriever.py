@@ -11,7 +11,7 @@ from tqdm import tqdm
 from utils.pickle_utils import save_pickle, load_pickle
 
 
-class REALM_like_retriever(Retriever):
+class BaseBertRetriever(Retriever):
     # "microsoft/BiomedNLP-PubMedBERT-base-uncased-abstract"
     tokenizer_type = "emilyalsentzer/Bio_ClinicalBERT"
     d_encoder_bert_type = "emilyalsentzer/Bio_ClinicalBERT"
@@ -92,7 +92,7 @@ class REALM_like_retriever(Retriever):
         query_faiss_input = query_embedding.cpu().detach().reshape(1, 768).numpy()
         _, I = self.index.search(query_faiss_input, self.num_documents)
 
-        retrieved_documents = [self.corpus_chunks[i] for i in I[0] if i < len(corpus_chunks)]
+        retrieved_documents = [self.corpus_chunks[i] for i in I[0] if i < len(self.corpus_chunks)]
         return retrieved_documents
 
     def freeze_layers(self):

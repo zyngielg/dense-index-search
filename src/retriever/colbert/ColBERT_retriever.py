@@ -289,11 +289,11 @@ class ColBERT_retriever(Retriever):
         for title, content in tqdm(corpus.items()):
 
             content_tokens = word_tokenize(content)
-
+            window = 25
             counter = 0
-            for i in range(0, len(content_tokens), chunk_length):
+            for i in range(0, len(content_tokens), window):
                 chunk_name = title + str(counter)
-                chunk = ' '.join(content_tokens[i:i+chunk_length])
+                chunk = ' '.join(content_tokens[i:i+chunk_length]).replace(' ( ',' ').replace(' ) ', ' ').replace(' [ ', ' ').replace(' ] ', ' ')
                 chunk_processed = self.__preprocess_content(
                     chunk, False, False, False)
                 stemmed_chunk_processed = self.__preprocess_content(
