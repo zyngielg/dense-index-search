@@ -40,7 +40,7 @@ def qa(questions, retriever: Retriever, reader: Reader):
 
 if __name__ == "__main__":    
     args = parse_arguments()
-    medqa_questions = MedQAQuestions(stemming=False)
+    medqa_questions = MedQAQuestions(args.questions_filtered, stemming=False)
     medqa_corpus = MedQACorpus(stemming=False)
 
     retriever_reader_factory = ReaderRetrieverFactory(

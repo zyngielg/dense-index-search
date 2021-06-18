@@ -261,16 +261,16 @@ class REALMLikeRetrieverBaseBERTReaderTrainer(Trainer):
         now = datetime.datetime.now()
         dt_string = now.strftime("%Y-%m-%d_%H:%M:%S")
         # saving training stats
-        training_stats_file = f"src/trainer/results/{dt_string}__REALM_like+base_BERT__training_stats.json"
+        training_stats_file = f"src/results/realm-based/{dt_string}__REALM_retriever__base_BERT_reader.json"
         with open(training_stats_file, 'w') as results_file:
             json.dump(training_info, results_file)
         print(f"Results saved in {training_stats_file}")
         # saving the retriever's q_encoder weights
-        retriever_file_name = f"src/trainer/results/{dt_string}__REALM_like+base_BERT__retriever.pth"
-        torch.save(self.retriever.q_encoder.state_dict(), retriever_file_name)
+        retriever_file_name = f"src/results/realm-based/{dt_string}__REALM_retriever.pth"
+        torch.save(self.retriever.q_embedder.state_dict(), retriever_file_name)
         print(f"Q_encoder weights saved in {retriever_file_name}")
         # saving the reader weights
-        reader_file_name = f"src/trainer/results/{dt_string}__REALM_like+base_BERT__reader.pth"
+        reader_file_name = f"src/results/realm-based/{dt_string}__BERT_reader.pth"
         torch.save(self.reader.model.state_dict(), reader_file_name)
         print(f"Reader weights saved in {retriever_file_name}")
 

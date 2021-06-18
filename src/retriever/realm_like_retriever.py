@@ -60,7 +60,6 @@ class REALMLikeRetriever(Retriever):
             self.q_embedder.load_state_dict(torch.load(self.base_weights_path))
             print(
                 f"[q_embedder] Loaded base model weights from {self.base_weights_path}")
-
         self.freeze_layers()
         if torch.cuda.device_count() > 1:
             print(f"Using {torch.cuda.device_count()} GPUs")
@@ -118,7 +117,7 @@ class REALMLikeRetriever(Retriever):
         return recalculated_scores, retrieved_documents
 
     def freeze_layers(self):
-        for name, param in self.q_embedder.named_parameters():
+        for name, param in self.d_embedder.named_parameters():
             param.requires_grad = False
 
         for name, param in self.q_embedder.named_parameters():
