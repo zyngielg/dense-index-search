@@ -7,16 +7,32 @@ class MedQAQuestions:
     questions_train_path = "data/medqa/questions/4_options/train.jsonl"
     questions_val_path = "data/medqa/questions/4_options/dev.jsonl"
     questions_test_path = "data/medqa/questions/4_options/test.jsonl"
+
+    questions_train_filtered_path = "data/medqa/questions/4_options/[filtered]q_train_valid.json"
+    questions_val_filtered_path = "data/medqa/questions/4_options/[filtered]q_val_valid.json"
+    questions_test_filtered_path = "data/medqa/questions/4_options/[filtered]q_test_valid.json"
+
     stemmer = SnowballStemmer(language='english')
 
-    def __init__(self, stemming):
+    def __init__(self, filter, stemming):
         self.stemming = stemming
-        self.questions_train = self.load_questions(
-            questions_path=self.questions_train_path)
-        self.questions_val = self.load_questions(
-            questions_path=self.questions_val_path)
-        self.questions_test = self.load_questions(
-            questions_path=self.questions_test_path)
+
+        if not filter:
+            print("*** Loading full sets of questions ... ***")
+            self.questions_train = self.load_questions(
+                questions_path=self.questions_train_path)
+            self.questions_val = self.load_questions(
+                questions_path=self.questions_val_path)
+            self.questions_test = self.load_questions(
+                questions_path=self.questions_test_path)
+        else:
+            print("*** Loading filtered sets of questions ... ***")
+            self.questions_train = self.load_filtered_questions(
+                questions_path=self.questions_train_filtered_path)
+            self.questions_val = self.load_filtered_questions(
+                questions_path=self.questions_val_filtered_path)
+            self.questions_test = self.load_filtered_questions(
+                questions_path=self.questions_test_filtered_path)
 
     def load_questions(self, questions_path):
         def stem_content(content):
@@ -38,4 +54,13 @@ class MedQAQuestions:
                             question['metamap_phrases'][i])
 
                 questions[f"q{idx}"] = question
+        return questions
+
+    def load_filtered_questions(self, questions_path):
+        questions = {}
+
+        with open(questions_path, 'r') as file:
+            content = json.load(file)
+            for idx, question_data in enumerate(content):
+                questions[f"q{idx}"] = question_data
         return questions
