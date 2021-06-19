@@ -23,8 +23,8 @@ class ColBERTRetriever(Retriever):
     base_weights_base_path = "data/colbert/colbert-400000.dnn"
     q_encoder_weights_path = ""
 
-    num_documents_faiss = 1500
-    num_documents_reader = 10
+    num_documents_faiss = 300
+    num_documents_reader = 5
     layers_to_not_freeze = ['8', '9', '10', '11', 'linear']
 
     stemmer = SnowballStemmer(language='english')
@@ -50,7 +50,7 @@ class ColBERTRetriever(Retriever):
 
         # defining tokenizer and encoders
         self.colbert = ColBERT.from_pretrained(self.bert_name,
-                                               query_maxlen=120,
+                                               query_maxlen=80,
                                                doc_maxlen=180,
                                                device=self.device,
                                                dim=128)
@@ -134,19 +134,13 @@ class ColBERTRetriever(Retriever):
             Q = Q.permute(0, 2, 1).contiguous().to(dtype=torch.float32)
             # preprocessing
             scores = self.score_calc.calculate_scores(Q, doc_ids)
-            scores_sorted = torch.tensor(scores).sort(descending=True)
-            doc_ids, scores = torch.tensor(
-                doc_ids)[scores_sorted.indices].tolist(), scores_sorted.values  # .tolist()
+            top_k = torch.topk(scores, self.num_documents_reader)
+            top_scores = top_k.values
+            top_doc_ids = [doc_ids[i] for i in top_k.indices]
+            top_docs = [self.documents[i] for i in top_doc_ids]
 
-            # documents extraction
-
-            retrieved_documents = []
-
-            # TODO: HERE I LOSE GRADIENTS
-            for id in doc_ids[:self.num_documents_reader]:
-                retrieved_documents.append(self.documents[id])
-            all_retrieved_docs.append(retrieved_documents)
-            all_scores.append(scores[:self.num_documents_reader])
+            all_scores.append(top_scores)
+            all_retrieved_docs.append(top_docs)
         return all_retrieved_docs, all_scores
 
     def freeze_layers(self):

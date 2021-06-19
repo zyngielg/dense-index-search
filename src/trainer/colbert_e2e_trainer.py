@@ -16,8 +16,8 @@ class ColBERTe2eTrainer(Trainer):
     def __init__(self, questions: MedQAQuestions, retriever: ColBERTRetriever, num_epochs: int, batch_size: int, lr: float) -> None:
         super().__init__(questions, retriever, None, num_epochs, batch_size, lr)
         self.batch_size = 4
-        self.num_train_questions = 1000
-        self.num_val_questions = 200
+        self.num_train_questions = len(self.questions_train)
+        self.num_val_questions = len(self.questions_val)
 
     def pepare_data_loader(self):
         print("******** Creating train dataloader ********")
@@ -88,37 +88,38 @@ class ColBERTe2eTrainer(Trainer):
                     query_options = [x + ' ' + query for x in options[q_idx]]
 
                     retrieved_documents, scores = self.retriever.retrieve_documents(query_options)
+                    scores_mean = torch.mean(torch.stack(scores), dim=1)
                     ### END OF DOCUMENT RETRIEVAL ###
 
-                    ### BEGINNING OF RECALCULATING RETRIEVED DOCUMENTS SCORES
-                    num_docs_retrieved = self.retriever.num_documents_reader
-                    q_ids, q_mask = self.retriever.tokenizer.tensorize_queries(query_options)
+                    # ### BEGINNING OF RECALCULATING RETRIEVED DOCUMENTS SCORES
+                    # num_docs_retrieved = self.retriever.num_documents_reader
+                    # q_ids, q_mask = self.retriever.tokenizer.tensorize_queries(query_options)
 
-                    retrieved_documents_reshaped = []
+                    # retrieved_documents_reshaped = []
                     
-                    for i in range(len(retrieved_documents[0])):
-                        for j in range(len(retrieved_documents)):
-                            retrieved_documents_reshaped.append(retrieved_documents[j][i])
+                    # for i in range(len(retrieved_documents[0])):
+                    #     for j in range(len(retrieved_documents)):
+                    #         retrieved_documents_reshaped.append(retrieved_documents[j][i])
 
-                    d_ids, d_mask = self.retriever.tokenizer.tensorize_documents(retrieved_documents_reshaped)
-                    d_ids, d_mask = d_ids.view(num_docs_retrieved, len(query_options), -1), d_mask.view(num_docs_retrieved, len(query_options), -1)
+                    # d_ids, d_mask = self.retriever.tokenizer.tensorize_documents(retrieved_documents_reshaped)
+                    # d_ids, d_mask = d_ids.view(num_docs_retrieved, len(query_options), -1), d_mask.view(num_docs_retrieved, len(query_options), -1)
                     
-                    d_ids_stacked = [d_ids[i] for i in range(num_docs_retrieved)]
-                    d_mask_stacked = [d_mask[i] for i in range(num_docs_retrieved)]
+                    # d_ids_stacked = [d_ids[i] for i in range(num_docs_retrieved)]
+                    # d_mask_stacked = [d_mask[i] for i in range(num_docs_retrieved)]
 
-                    q_ids_stacked = [q_ids for i in range(num_docs_retrieved)]
-                    q_mask_stacked = [q_mask for i in range(num_docs_retrieved)]
+                    # q_ids_stacked = [q_ids for i in range(num_docs_retrieved)]
+                    # q_mask_stacked = [q_mask for i in range(num_docs_retrieved)]
                                 
-                    Q = (torch.cat(q_ids_stacked), torch.cat(q_mask_stacked))
-                    D = (torch.cat(d_ids_stacked), torch.cat(d_mask_stacked))
+                    # Q = (torch.cat(q_ids_stacked), torch.cat(q_mask_stacked))
+                    # D = (torch.cat(d_ids_stacked), torch.cat(d_mask_stacked))
 
-                    test = self.retriever.colbert(Q, D).view(num_docs_retrieved, -1).permute(1, 0)
-                    test_mean = torch.mean(test, dim=1).unsqueeze(0)
-                    results.append(test_mean)
+                    # test = self.retriever.colbert(Q, D).view(num_docs_retrieved, -1).permute(1, 0)
+                    # test_mean = torch.mean(test, dim=1).unsqueeze(0)
+                    results.append(scores_mean)
 
 
-                results = torch.cat(results)
-                loss = criterion(results, answers_indexes.to(device))                
+                results = torch.stack(results)
+                loss = criterion(results, answers_indexes.to("cuda:2"))                
                 if self.num_gpus > 1:
                     loss = loss.mean()
                 total_train_loss += loss.item()
@@ -157,7 +158,7 @@ class ColBERTe2eTrainer(Trainer):
                 if step % 10 == 0 and not step == 0:
                     elapsed = self.format_time(time.time() - t0)
                     print(
-                        f'Batch {step} of {len(train_dataloader)}. Elapsed: {elapsed}')
+                        f'Batch {step} of {len(val_dataloader)}. Elapsed: {elapsed}')
 
                 questions = batch[0]
                 answers_indexes = batch[2]
@@ -174,38 +175,38 @@ class ColBERTe2eTrainer(Trainer):
 
                         retrieved_documents, scores = self.retriever.retrieve_documents(query_options)
                         ### END OF DOCUMENT RETRIEVAL ###
+                        scores_mean = torch.mean(torch.stack(scores), dim=1)
+                        results.append(scores_mean)
+                        # ### BEGINNING OF RECALCULATING RETRIEVED DOCUMENTS SCORES
+                        # num_docs_retrieved = self.retriever.num_documents_reader
+                        # q_ids, q_mask = self.retriever.tokenizer.tensorize_queries(query_options)
 
-
-                        ### BEGINNING OF RECALCULATING RETRIEVED DOCUMENTS SCORES
-                        num_docs_retrieved = self.retriever.num_documents_reader
-                        q_ids, q_mask = self.retriever.tokenizer.tensorize_queries(query_options)
-
-                        retrieved_documents_reshaped = []
+                        # retrieved_documents_reshaped = []
                         
-                        for i in range(len(retrieved_documents[0])):
-                            for j in range(len(retrieved_documents)):
-                                retrieved_documents_reshaped.append(retrieved_documents[j][i])
+                        # for i in range(len(retrieved_documents[0])):
+                        #     for j in range(len(retrieved_documents)):
+                        #         retrieved_documents_reshaped.append(retrieved_documents[j][i])
 
-                        # test_retrieved_documents = [item for sublist in retrieved_documents for item in sublist]
-                        d_ids, d_mask = self.retriever.tokenizer.tensorize_documents(retrieved_documents_reshaped)
-                        d_ids, d_mask = d_ids.view(num_docs_retrieved, len(query_options), -1), d_mask.view(num_docs_retrieved, len(query_options), -1)
+                        # # test_retrieved_documents = [item for sublist in retrieved_documents for item in sublist]
+                        # d_ids, d_mask = self.retriever.tokenizer.tensorize_documents(retrieved_documents_reshaped)
+                        # d_ids, d_mask = d_ids.view(num_docs_retrieved, len(query_options), -1), d_mask.view(num_docs_retrieved, len(query_options), -1)
                         
-                        d_ids_stacked = [d_ids[i] for i in range(num_docs_retrieved)]
-                        d_mask_stacked = [d_mask[i] for i in range(num_docs_retrieved)]
+                        # d_ids_stacked = [d_ids[i] for i in range(num_docs_retrieved)]
+                        # d_mask_stacked = [d_mask[i] for i in range(num_docs_retrieved)]
 
-                        q_ids_stacked = [q_ids for i in range(num_docs_retrieved)]
-                        q_mask_stacked = [q_mask for i in range(num_docs_retrieved)]
+                        # q_ids_stacked = [q_ids for i in range(num_docs_retrieved)]
+                        # q_mask_stacked = [q_mask for i in range(num_docs_retrieved)]
                                     
-                        Q = (torch.cat(q_ids_stacked), torch.cat(q_mask_stacked))
-                        D = (torch.cat(d_ids_stacked), torch.cat(d_mask_stacked))
+                        # Q = (torch.cat(q_ids_stacked), torch.cat(q_mask_stacked))
+                        # D = (torch.cat(d_ids_stacked), torch.cat(d_mask_stacked))
 
-                        test = self.retriever.colbert(Q, D).view(num_docs_retrieved, -1).permute(1, 0)
-                        test_mean = torch.mean(test, dim=1).unsqueeze(0)
-                        results.append(test_mean)
+                        # test = self.retriever.colbert(Q, D).view(num_docs_retrieved, -1).permute(1, 0)
+                        # test_mean = torch.mean(test, dim=1).unsqueeze(0)
+                        # results.append(test_mean)
 
 
-                results = torch.cat(results)
-                loss = criterion(results, answers_indexes.to(device))   
+                results = torch.stack(results)
+                loss = criterion(results, answers_indexes.to("cuda:2"))   
                 if self.num_gpus > 1:
                     loss = loss.mean()
                 # Accumulate the validation loss.

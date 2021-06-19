@@ -12,7 +12,14 @@ class ColBERTScoreCalculator():
         self.dim = embeddings_tensor.size(-1)
         self.doclens = doclens
         self.doclens_pfxsum = [0] + list(accumulate(doclens))
-        
+        # useful for debugging the views, maybe will come in handy
+        # print(f"Num doclens = {len(self.doclens)}")
+        # print(f"Sum of doclens = {sum(self.doclens)}")
+        # print(f"Num pfxsum = {len(self.doclens_pfxsum)}")
+        # print(f"Sum of pfxsum = {sum(self.doclens_pfxsum)}")
+        # print(f"Max of pfxsum = {max(self.doclens_pfxsum)}")
+        # print(f"last value of doclens = {self.doclens[-1]}")
+        # print(f"last value of prefix sum = {self.doclens_pfxsum[-1]}")
         self.doclens = torch.tensor(self.doclens)
         self.doclens_pfxsum = torch.tensor(self.doclens_pfxsum)
         
@@ -37,20 +44,13 @@ class ColBERTScoreCalculator():
         pids = torch.tensor(pids) if type(pids) is list else pids
 
         doclens, offsets = self.doclens[pids], self.doclens_pfxsum[pids]      
-
-        x = doclens.unsqueeze(1)
-        xx = torch.tensor(self.strides)
-        xxx = xx.unsqueeze(0) + 1e-6
-        y = (x > xx)
-        yy = y.sum(-1)
-
         assignments = (doclens.unsqueeze(1) > torch.tensor(self.strides).unsqueeze(0) + 1e-6).sum(-1)
 
         one_to_n = torch.arange(len(raw_pids))
         output_pids, output_scores, output_permutation = [], [], []
-
+        
         for group_idx, stride in enumerate(self.strides):
-            inner_device_idx = group_idx % 3 + 1
+            inner_device_idx = group_idx % 3
             inner_DEVICE = torch.device(f"cuda:{inner_device_idx}")
             locator = (assignments == group_idx)
 
@@ -64,36 +64,7 @@ class ColBERTScoreCalculator():
             group_offsets_uniq, group_offsets_expand = torch.unique_consecutive(group_offsets, return_inverse=True)
 
             D_size = group_offsets_uniq.size(0)
-            
-            # print(f"Shape of views num {group_idx}: {self.views[group_idx].shape}")
-            # print(f"Shape of group_offsets_uniq: {group_offsets_uniq.shape}")
-            # print(f"Max value in group_offsets_uniq: {max(group_offsets_uniq)}")
-            # print(f"Shape of D_buffers num {group_idx}: {D_buffers[group_idx].shape}")
-            # print(f"D_size={D_size}")
-            try:
-                D = torch.index_select(self.views[group_idx], 0, group_offsets_uniq, out=D_buffers[group_idx][:D_size])
-                # D = torch.index_select(self.views[group_idx], 0, group_offsets_uniq)
-                # print(f"Shape of views num {group_idx}: {self.views[group_idx].shape}")
-                # print(f"Shape of group_offsets_uniq: {group_offsets_uniq.shape}")
-                # print(f"Max value in group_offsets_uniq: {max(group_offsets_uniq)}")
-                # print(f"Shape of D_buffers num {group_idx}: {D_buffers[group_idx].shape}")
-                # print(f"D_size={D_size}")
-            except Exception as inst:
-                # # print(type(inst))    # the exception instance
-                # # print(inst.args)     # arguments stored in .args
-                # # print(inst)
-                self.issue_counter += 1
-                # # TODO: very often the max is the same number all the time
-                # print(f"Shape of views num {group_idx}: {self.views[group_idx].shape}")
-                # print(f"Shape of group_offsets_uniq: {group_offsets_uniq.shape}")
-                # print(f"Max value in group_offsets_uniq: {max(group_offsets_uniq)}")
-                # print(f"Shape of D_buffers num {group_idx}: {D_buffers[group_idx].shape}")
-                # print(f"D_size={D_size}")
-                zeros = torch.zeros_like(group_offsets_uniq)
-                group_offsets_uniq = torch.where(group_offsets_uniq > self.views[group_idx].shape[0], zeros, group_offsets_uniq)
-                # D_size = group_offsets_uniq.size(0)
-                D = torch.index_select(self.views[group_idx], 0, group_offsets_uniq, out=D_buffers[group_idx][:D_size])
-                # D = torch.index_select(self.views[group_idx], 0, group_offsets_uniq)
+            D = torch.index_select(self.views[group_idx], 0, group_offsets_uniq, out=D_buffers[group_idx][:D_size])
             D = D.to(inner_DEVICE)
             D = D[group_offsets_expand.to(inner_DEVICE)].to(dtype=self.maxsim_dtype)
 
@@ -101,19 +72,19 @@ class ColBERTScoreCalculator():
             mask = mask.unsqueeze(0) <= group_doclens.to(inner_DEVICE).unsqueeze(-1)
             
             scores = (D @ group_Q) * mask.unsqueeze(-1)
-            scores = scores.max(1).values.sum(-1).cpu()
+            scores = scores.max(1).values.sum(-1)
 
-            output_pids.append(group_pids)
-            output_scores.append(scores)
+            # output_pids.append(group_pids)
+            output_scores.append(scores.to('cuda:2'))
             output_permutation.append(one_to_n[locator])
 
         output_permutation = torch.cat(output_permutation).sort().indices
-        output_pids = torch.cat(output_pids)[output_permutation].tolist()
-        output_scores = torch.cat(output_scores)[output_permutation].tolist()
+        output_scores = torch.cat(output_scores)[output_permutation]#.tolist()
+        # output_pids = torch.cat(output_pids)[output_permutation].tolist()
 
-        assert len(raw_pids) == len(output_pids)
-        assert len(raw_pids) == len(output_scores)
-        assert raw_pids == output_pids
+        # assert len(raw_pids) == len(output_pids)
+        # assert len(raw_pids) == len(output_scores)
+        # assert raw_pids == output_pids
 
         return output_scores
 
