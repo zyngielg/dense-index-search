@@ -7,13 +7,13 @@ import torch
 
 from data.data_loader import create_questions_data_loader
 from data.medqa_questions import MedQAQuestions
-from retriever.colbert.ColBERT_retriever import ColBERT_retriever
+from retriever.colbert.colbert_retriever import ColBERTRetriever
 from trainer.trainer import Trainer
 from transformers import get_linear_schedule_with_warmup
 from utils.general_utils import remove_duplicates_preserve_order
 
-class ColBERT_e2e_trainer(Trainer):
-    def __init__(self, questions: MedQAQuestions, retriever: ColBERT_retriever, num_epochs: int, batch_size: int, lr: float) -> None:
+class ColBERTe2eTrainer(Trainer):
+    def __init__(self, questions: MedQAQuestions, retriever: ColBERTRetriever, num_epochs: int, batch_size: int, lr: float) -> None:
         super().__init__(questions, retriever, None, num_epochs, batch_size, lr)
         self.batch_size = 4
         self.num_train_questions = 1000
@@ -257,12 +257,12 @@ class ColBERT_e2e_trainer(Trainer):
         now = datetime.datetime.now()
         dt_string = now.strftime("%Y-%m-%d_%H:%M:%S")
         # saving training stats
-        training_stats_file = f"src/trainer/results/{dt_string}__ColBERT_e2e_stats.json"
+        training_stats_file = f"src/results/colbert-based/{dt_string}__ColBERT_e2e_stats.json"
         with open(training_stats_file, 'w') as results_file:
             json.dump(training_info, results_file)
         print(f"Results saved in {training_stats_file}")
       
-        colbert_file_name = f"src/trainer/results/{dt_string}__ColBERT_e2e_retriever.pth"
+        colbert_file_name = f"src/results/colbert-based/{dt_string}__ColBERT_e2e_retriever.pth"
         torch.save(self.retriever.colbert.state_dict(), colbert_file_name)
         print(f"Reader weights saved in {colbert_file_name}")
 

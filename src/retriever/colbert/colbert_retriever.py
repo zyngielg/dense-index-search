@@ -2,26 +2,27 @@ import faiss
 import torch
 import numpy as np
 import faiss
-import math
 
 from data.medqa_corpus import MedQACorpus
-from models.ColBERT import ColBERT
+from models.colbert import ColBERT
 from nltk.stem.snowball import SnowballStemmer
 from nltk import word_tokenize, sent_tokenize
-from retriever.colbert.ColBERT_tokenizer import ColbertTokenizer
+from retriever.colbert.colbert_tokenizer import ColbertTokenizer
 from retriever.colbert.colbert_score_calculator import ColBERTScoreCalculator
 from retriever.retriever import Retriever
 from tqdm import tqdm
 from utils.pickle_utils import save_pickle, load_pickle
 from utils.general_utils import torch_percentile, uniq, remove_duplicates_preserve_order
-from operator import itemgetter
 
 
-class ColBERT_retriever(Retriever):
+class ColBERTRetriever(Retriever):
 
     bert_name = "emilyalsentzer/Bio_ClinicalBERT"
     # change to specify the weights file
+    base_weights_bio_path = "data/colbert/colbert-clinical-biobert-cosine-200000.dnn"
+    base_weights_base_path = "data/colbert/colbert-400000.dnn"
     q_encoder_weights_path = ""
+
     num_documents_faiss = 1500
     num_documents_reader = 10
     layers_to_not_freeze = ['8', '9', '10', '11', 'linear']
@@ -38,10 +39,11 @@ class ColBERT_retriever(Retriever):
     embbedding2doc_id_path = "data/colbert/embbedding2doc_id_[colbert][clinicalbiobert200000][cosine-sim][chunks100unprocessed].pickle"
     doc_embeddings_lengths_path = "data/colbert/document_embeddings_lengths_[colbert][clinicalbiobert200000][cosine-sim][chunks100unprocessed].pickle"
 
-    def __init__(self, load_weights=False, load_index=False) -> None:
+    def __init__(self, load_weights=False, biobert_or_base_bert="bio") -> None:
         super().__init__()
         self.load_weights = load_weights
-        self.load_index = load_index
+        self.biobert_or_base_bert = biobert_or_base_bert
+        
         self.device = torch.device(
             'cuda') if torch.cuda.is_available() else torch.device('cpu')
         print("Using {} device".format(self.device))
@@ -55,24 +57,36 @@ class ColBERT_retriever(Retriever):
         self.tokenizer = ColbertTokenizer(bert_name=self.bert_name,
                                           query_maxlen=self.colbert.query_maxlen,
                                           doc_maxlen=self.colbert.doc_maxlen)
+        # loading weights
+        if load_weights:
+            print(
+                f"Loading saved finetuned model weights from {self.q_encoder_weights_path}")
+            ColBERT.load_checkpoint(self.q_encoder_weights_path, self.colbert)
+        else:
+            if biobert_or_base_bert == "bio":
+                print(
+                    f"Loading trained biobert weights from {self.base_weights_bio_path}")
+                ColBERT.load_checkpoint(
+                    self.base_weights_bio_path, self.colbert)
+                self.faiss_index_path = "data/colbert/index_[colbert][clinicalbiobert200000][cosine-sim][chunks100unprocessed].index"
+                self.document_embeddings_path = "data/colbert/document_embeddings_[colbert][clinicalbiobert200000][cosine-sim][chunks100unprocessed].pickle"
+                self.document_embeddings_tensor_path = "data/colbert/document_embeddings_tensor[clinicalbiobert200000].pt"
+            else:
+                print(
+                    f"Loading trained base-bert weights from {self.base_weights_base_path}")
+                ColBERT.load_checkpoint(
+                    self.base_weights_bio_path, self.colbert)
+                self.faiss_index_path = "data/colbert/index_[colbert][basebert400000][l2-sim][chunks100unprocessed].index"
+                self.document_embeddings_path = "data/colbert/document_embeddings_[colbert][basebert400000][cosine-sim][chunks100unprocessed].pickle"
+                self.document_embeddings_tensor_path = "data/colbert/document_embeddings_tensor[basebert400000].pt"
 
         # if torch.cuda.device_count() > 1:
         #     print(f"Using {torch.cuda.device_count()} GPUs")
         #     self.colbert = torch.nn.DataParallel(self.colbert)
 
-        # loading weights
-        if load_weights:
-            ColBERT.load_checkpoint(self.bert_weights_path, self.colbert)
-
-        # loading index
-        if load_index:
-            self.index = faiss.read_index(self.faiss_index_path)
-
-        # freezing layers
         self.freeze_layers()
         self.colbert.to(self.device)
 
-        # info about used chunks
         self.used_chunks_size = 100
 
     def get_info(self):
@@ -85,9 +99,9 @@ class ColBERT_retriever(Retriever):
         info['weights loaded'] = self.load_weights
         if self.load_weights:
             info['weights path'] = self.q_encoder_weights_path
-        info['index loaded'] = self.load_index
-        if self.load_index:
-            info['index path'] = self.faiss_index_path
+        else:
+            info["base_weights_type"] = self.biobert_or_base_bert
+        info['index path'] = self.faiss_index_path
         info['chunk_size_used'] = self.used_chunks_size
 
         return info
@@ -99,8 +113,7 @@ class ColBERT_retriever(Retriever):
             # Q = self.colbert.module.query(input_ids, mask)
             Q = self.colbert.query(input_ids, mask)
 
-
-            # 150000 
+            # 150000
             # queries_to_embedding_ids
             num_queries, embeddings_per_query, dim = Q.size()
             Q_faiss = Q.view(num_queries * embeddings_per_query,
@@ -123,7 +136,7 @@ class ColBERT_retriever(Retriever):
             scores = self.score_calc.calculate_scores(Q, doc_ids)
             scores_sorted = torch.tensor(scores).sort(descending=True)
             doc_ids, scores = torch.tensor(
-                doc_ids)[scores_sorted.indices].tolist(), scores_sorted.values#.tolist()
+                doc_ids)[scores_sorted.indices].tolist(), scores_sorted.values  # .tolist()
 
             # documents extraction
 
@@ -171,10 +184,11 @@ class ColBERT_retriever(Retriever):
         dimension = self.colbert.dim
 
         if create_encodings:
+            self.colbert.eval()
             print("******** 1a. Creating document embeddings ... ********")
             embeddings = []
             self.doc_embeddings_lengths = []
-            batch_size = 100
+            batch_size = 110
             for idx in tqdm(range(0, len(self.documents), batch_size)):
                 contents = self.documents[idx:idx+batch_size]
 
@@ -182,11 +196,12 @@ class ColBERT_retriever(Retriever):
                 # test = self.tokenizer.doc_tokenizer.decode(ids[0])
                 with torch.no_grad():
                     # batch_embeddings = self.colbert.module.doc(ids, mask, keep_dims=False)
-                    batch_embeddings = self.colbert.doc(ids, mask, keep_dims=False)
-                self.doc_embeddings_lengths += [d.size(0) for d in batch_embeddings]
+                    batch_embeddings = self.colbert.doc(
+                        ids, mask, keep_dims=False)
+                self.doc_embeddings_lengths += [d.size(0)
+                                                for d in batch_embeddings]
                 embeddings.append(torch.cat(batch_embeddings))
-                
-            
+
             save_pickle(self.doc_embeddings_lengths,
                         self.doc_embeddings_lengths_path)
             self.embeddings_tensor = torch.cat(embeddings)
@@ -221,7 +236,7 @@ class ColBERT_retriever(Retriever):
                 self.doc_embeddings_lengths_path)
             self.embbedding2doc_id = load_pickle(self.embbedding2doc_id_path)
             print("********    ... embeddings and matrix loaded ********")
-        
+
         if create_index:
             print("******** 2a. Creating and populating faiss index ...  *****")
             # num_embeddings = doc_embeddings.shape[0]
@@ -293,7 +308,8 @@ class ColBERT_retriever(Retriever):
             counter = 0
             for i in range(0, len(content_tokens), window):
                 chunk_name = title + str(counter)
-                chunk = ' '.join(content_tokens[i:i+chunk_length]).replace(' ( ',' ').replace(' ) ', ' ').replace(' [ ', ' ').replace(' ] ', ' ')
+                chunk = ' '.join(content_tokens[i:i+chunk_length]).replace(
+                    ' ( ', ' ').replace(' ) ', ' ').replace(' [ ', ' ').replace(' ] ', ' ')
                 chunk_processed = self.__preprocess_content(
                     chunk, False, False, False)
                 stemmed_chunk_processed = self.__preprocess_content(

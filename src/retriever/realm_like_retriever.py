@@ -90,13 +90,14 @@ class REALMLikeRetriever(Retriever):
                                          truncation=True,
                                          return_tensors="pt")
         queries_embedding = self.q_embedder(**query_tokenized)
-        queries_faiss_input = queries_embedding.cpu().numpy()
+        queries_faiss_input = queries_embedding.cpu().detach().numpy()
         scores, doc_ids = self.index.search(
             queries_faiss_input, self.num_documents)
 
         retrieved_documents = []
         for id_list in doc_ids:
-            retrieved_documents.append([self.corpus_chunks[i]['content'] for i in id_list])
+            retrieved_documents.append(
+                [self.corpus_chunks[i]['content'] for i in id_list])
 
         retrieved_documents_score_calc = [self.corpus_chunks[i]['content']
                                           for x in doc_ids for i in x]
@@ -190,13 +191,12 @@ class REALMLikeRetriever(Retriever):
                                                return_tensors="pt")
             with torch.no_grad():
                 embeddings = self.d_embedder(**content_tokenized)
-            self.document_embeddingsdocument_embeddings[i:i +
-                                                        batch_size] = embeddings.cpu()
+            self.document_embeddings[i:i + batch_size] = embeddings.cpu()
 
         print("********     ... chunks' embeddings created ********")
 
         print("******** 1b. Saving chunk embeddings to file ... ********")
-        save_pickle(self.chunks_embeddings,
+        save_pickle(self.document_embeddings,
                     file_path=self.document_encodings_path)
         print("********     ... embeddings saved *********")
 

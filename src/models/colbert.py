@@ -7,9 +7,6 @@ from collections import OrderedDict
 from models.colbert_parameters import DEVICE
 
 class ColBERT(BertPreTrainedModel):
-    # DEVICE = 'cuda:3'
-    # note: ColBERT was using dim=128, but the checkpoint from huggingface requires 32
-
     def __init__(self, config, query_maxlen, doc_maxlen, device='cpu', mask_punctuation=True, dim=128, similarity_metric='cosine'):
 
         super(ColBERT, self).__init__(config)
@@ -76,7 +73,7 @@ class ColBERT(BertPreTrainedModel):
                 for d in input_ids.cpu().tolist()]
         return mask
 
-    @staticmethod
+    @staticmethod    
     def load_checkpoint(path, model):
         print(f"******** Loading checkpoint from {path} ********")
 
