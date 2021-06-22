@@ -17,12 +17,13 @@ from trainer.trainer import Trainer
 
 
 class ReaderRetrieverFactory():
-    def __init__(self, retriever_choice, reader_choice, from_es_session=False, load_weights=False, load_index=False) -> None:
+    def __init__(self, retriever_choice, reader_choice, from_es_session=False, load_weights=False, load_index=False, colbert_base="bio") -> None:
         self.retriever_choice = retriever_choice
         self.reader_choice = reader_choice
         self.from_es_session = from_es_session
         self.load_weights = load_weights
         self.load_index = load_index
+        self.colbert_base = colbert_base
 
     def create_retriever(self, ) -> Retriever:
         retriever = None
@@ -34,7 +35,7 @@ class ReaderRetrieverFactory():
         elif self.retriever_choice == "REALM-like":
             retriever = REALMLikeRetriever(load_weights=self.load_weights)
         elif self.retriever_choice == "ColBERT":
-            retriever = ColBERTRetriever(load_weights=False, biobert_or_base_bert="bio")
+            retriever = ColBERTRetriever(load_weights=False, biobert_or_base_bert=self.colbert_base)
 
         if retriever is None:
             print("Retriever has not been initialized. Check input arguments")

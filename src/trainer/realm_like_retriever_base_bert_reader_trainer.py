@@ -28,7 +28,7 @@ class REALMLikeRetrieverBaseBERTReaderTrainer(Trainer):
 
         print("******** Creating val dataloader ********")
         val_dataloader = create_questions_data_loader(
-            questions=self.questions_val, batch_size=self.batch_size, num_questions=len(self.questions_train))
+            questions=self.questions_val, batch_size=self.batch_size, num_questions=len(self.questions_val))
         print("******** Val dataloader created  ********")
 
         return train_dataloader, val_dataloader
@@ -89,8 +89,7 @@ class REALMLikeRetrieverBaseBERTReaderTrainer(Trainer):
                     metamap_phrases[q_idx] = remove_duplicates_preserve_order(
                         metamap_phrases[q_idx])
                     query = ' '.join(metamap_phrases[q_idx])
-                    query_options = [query + ' [SEP] ' +
-                                     x for x in options[q_idx]]
+                    query_options = ['[unused5] ' + query + ' [unused6] ' + x for x in options[q_idx]]
                     scores, retrieved_documents = self.retriever.retrieve_documents(
                         query_options)
 
@@ -101,7 +100,7 @@ class REALMLikeRetrieverBaseBERTReaderTrainer(Trainer):
                             option_documents.append(document)
                         contexts.append(' '.join(option_documents))
 
-                    retriever_scores.append(torch.mean(scores, dim=0))
+                    retriever_scores.append(torch.mean(scores, dim=1))
                     question_inputs = self.reader.tokenizer(
                         contexts, query_options, add_special_tokens=True, max_length=512, padding='max_length', truncation='longest_first', return_tensors="pt")
                     input_ids.append(question_inputs['input_ids'])
@@ -115,9 +114,9 @@ class REALMLikeRetrieverBaseBERTReaderTrainer(Trainer):
                 output = self.reader.model(
                     input_ids=tensor_input_ids, attention_mask=tensor_attention_masks, token_type_ids=tensor_token_type_ids)
 
-                retriever_score = log_softmax(retriever_scores)
+                retriever_score = 0 # log_softmax(retriever_scores)
                 reader_score = log_softmax(output)
-                sum_score = retriever_score + reader_score
+                sum_score = reader_score #+ retriever_score
                 loss = criterion(sum_score, answers_indexes.to(device))
                 if self.num_gpus > 1:
                     loss = loss.mean()
@@ -176,9 +175,10 @@ class REALMLikeRetrieverBaseBERTReaderTrainer(Trainer):
                     metamap_phrases[q_idx] = remove_duplicates_preserve_order(
                         metamap_phrases[q_idx])
                     query = ' '.join(metamap_phrases[q_idx])
-                    query_options = [query + ' ' + x for x in options[q_idx]]
-                    scores, retrieved_documents = self.retriever.retrieve_documents(
-                        query_options)
+                    query_options = ['[unused5] ' + query + ' [unused6] ' + x for x in options[q_idx]]
+                    with torch.no_grad():
+                        scores, retrieved_documents = self.retriever.retrieve_documents(
+                            query_options)
 
                     contexts = []
                     for idx in range(len(retrieved_documents)):
@@ -187,7 +187,7 @@ class REALMLikeRetrieverBaseBERTReaderTrainer(Trainer):
                             option_documents.append(document)
                         contexts.append(' '.join(option_documents))
 
-                    retriever_scores.append(torch.mean(scores, dim=0))
+                    retriever_scores.append(torch.mean(scores, dim=1))
                     question_inputs = self.reader.tokenizer(contexts, query_options,
                                                             add_special_tokens=True,
                                                             max_length=512, 
@@ -207,9 +207,9 @@ class REALMLikeRetrieverBaseBERTReaderTrainer(Trainer):
                     output = self.reader.model(
                         input_ids=tensor_input_ids.to(device), attention_mask=tensor_token_type_ids.to(device), token_type_ids=tensor_attention_masks.to(device))
 
-                retriever_score = log_softmax(retriever_scores)
+                retriever_score = 0 #log_softmax(retriever_scores)
                 reader_score = log_softmax(output)
-                sum_score = retriever_score + reader_score
+                sum_score = reader_score # +  retriever_score
                 loss = criterion(sum_score, answers_indexes.to(device))
                 if self.num_gpus > 1:
                     loss = loss.mean()

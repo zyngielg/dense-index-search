@@ -9,8 +9,8 @@ from reader.base_bert_reader import Base_BERT_Reader
 
 # TODO: move to separate config file
 num_epochs = 4
-batch_size = 12
-lr = 5e-5
+batch_size = 32
+lr = 2e-5
 
 
 def parse_arguments():
@@ -22,6 +22,8 @@ def parse_arguments():
         'retriever', help="Choose retriever to be used. Possible options: IR-ES, Base-BERT, REALM-like")
     parser.add_argument(
         'reader', help="Choose reader to be used. Possible options: Base-BERT, BERT-for-multiple-choice")
+    parser.add_argument(
+        '--colbert_base', dest="colbert_base", help="Choise of BERT model for the ColBERT retrieval. Possible options: bio, base")
     return parser.parse_args()
 
 
@@ -44,7 +46,7 @@ if __name__ == "__main__":
     medqa_corpus = MedQACorpus(stemming=False)
 
     retriever_reader_factory = ReaderRetrieverFactory(
-        retriever_choice=args.retriever, reader_choice=args.reader)
+        retriever_choice=args.retriever, reader_choice=args.reader, colbert_base=args.colbert_base)
     retriever = retriever_reader_factory.create_retriever()
     retriever.prepare_retriever(corpus=None, create_encodings=False, create_index=False)
     reader = retriever_reader_factory.create_reader()

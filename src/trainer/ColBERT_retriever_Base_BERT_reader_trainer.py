@@ -20,12 +20,14 @@ class ColBERT_retriever_Base_BERT_reader_trainer(Trainer):
     def pepare_data_loader(self):
         print("******** Creating train dataloader ********")
         train_dataloader = create_questions_data_loader(
-            questions=self.questions_train, tokenizer=self.retriever.tokenizer, batch_size=self.batch_size)
+            questions=self.questions_train,
+            batch_size=self.batch_size,
+            num_questions=len(self.questions_train))
         print("******** Train dataloader created  ********")
 
         print("******** Creating val dataloader ********")
         val_dataloader = create_questions_data_loader(
-            questions=self.questions_val, tokenizer=self.retriever.tokenizer, batch_size=self.batch_size)
+            questions=self.questions_val, batch_size=self.batch_size, num_questions=len(self.questions_val))
         print("******** Val dataloader created  ********")
 
         return train_dataloader, val_dataloader
@@ -50,7 +52,7 @@ class ColBERT_retriever_Base_BERT_reader_trainer(Trainer):
             "total_training_time": None,
             "training_stats": []
         }
-
+        log_softmax = torch.nn.LogSoftmax(dim=1)
         criterion = torch.nn.CrossEntropyLoss()
         params = list(self.retriever.colbert.parameters()) + \
             list(self.reader.model.parameters())
@@ -87,12 +89,13 @@ class ColBERT_retriever_Base_BERT_reader_trainer(Trainer):
                 input_ids = []
                 token_type_ids = []
                 attention_masks = []
-
+                retriever_scores = []
                 for q_idx in range(len(questions)):
                     metamap_phrases[q_idx] = remove_duplicates_preserve_order(metamap_phrases[q_idx])
                     query = ' '.join(metamap_phrases[q_idx])
-                    query_options = [x + ' ' + query for x in options[q_idx]]
+                    query_options = ['[unused4] ' + x + ' [unused5] ' + query for x in options[q_idx]]
                     retrieved_documents, scores = self.retriever.retrieve_documents(query_options)
+                    # retriever_scores.append(torch.mean(scores, dim=1))
                         
                     contexts = []
                     for idx in range(len(retrieved_documents)):
@@ -101,8 +104,8 @@ class ColBERT_retriever_Base_BERT_reader_trainer(Trainer):
                             option_documents.append(document_content)
                         contexts.append(' '.join(option_documents))
 
-                    question_inputs = self.retriever.tokenizer.query_tokenizer(
-                        query_options, contexts, add_special_tokens=True, max_length=300, padding='max_length', truncation=True, return_tensors="pt")
+                    question_inputs = self.reader.tokenizer(
+                        query_options, contexts, add_special_tokens=True, max_length=512, padding='max_length', truncation='longest_first', return_tensors="pt")
                     input_ids.append(question_inputs['input_ids'])
                     token_type_ids.append(question_inputs['token_type_ids'])
                     attention_masks.append(question_inputs['attention_mask'])
@@ -110,10 +113,16 @@ class ColBERT_retriever_Base_BERT_reader_trainer(Trainer):
                 tensor_input_ids = torch.stack(input_ids, dim=0)
                 tensor_token_type_ids = torch.stack(token_type_ids, dim=0)
                 tensor_attention_masks = torch.stack(attention_masks, dim=0)
+                # retriever_scores = torch.stack(retriever_scores, dim=0)
 
                 output = self.reader.model(
                     input_ids=tensor_input_ids.to(device), attention_mask=tensor_token_type_ids.to(device), token_type_ids=tensor_attention_masks.to(device))
 
+                #retriever_score = log_softmax(retriever_scores)
+                reader_score = log_softmax(output)
+                #sum_score = retriever_score.to(device) + reader_score
+                #loss = criterion(sum_score, answers_indexes.to(device))
+                
                 loss = criterion(output, answers_indexes.to(device))
                 if self.num_gpus > 1:
                     loss = loss.mean()
@@ -166,31 +175,29 @@ class ColBERT_retriever_Base_BERT_reader_trainer(Trainer):
                         f'Batch {step} of {len(train_dataloader)}. Elapsed: {elapsed}')
                 questions = batch[0]
                 answers_indexes = batch[2]
-                options = batch[3]
-                metamap_phrases = batch[4]
+                options = [x.split('#') for x in batch[3]]
+                metamap_phrases = [x.split('#') for x in batch[4]]
 
                 input_ids = []
                 token_type_ids = []
                 attention_masks = []
-
+                #retriever_scores = []
                 for q_idx in range(len(questions)):
                     query = ' '.join(metamap_phrases[q_idx])
-                    # or
-                    # query = questions[q_idx]
-                    query_options = [x + ' ' + query for x in options[q_idx]]
-                    # retrieved_documents = [
-                    #     self.retriever.retrieve_documents(x) for x in query_options]
-                    retrieved_documents, scores = self.retriever.retrieve_documents(query_options)
 
+                    query_options = [x + ' [unused5]  ' + query for x in options[q_idx]]
+                    with torch.no_grad():
+                        retrieved_documents, scores = self.retriever.retrieve_documents(query_options)
+                    #retriever_scores.append(torch.mean(scores, dim=1))
                     contexts = []
                     for idx in range(len(retrieved_documents)):
                         option_documents = []
                         for document in retrieved_documents[idx]:
-                            option_documents.append(document['content'])
+                            option_documents.append(document)
                         contexts.append(' '.join(option_documents))
 
-                    question_inputs = self.retriever.tokenizer(
-                        query_options, contexts, add_special_tokens=True, max_length=512, padding='max_length', truncation=True, return_tensors="pt")
+                    question_inputs = self.reader.tokenizer(
+                        query_options, contexts, add_special_tokens=True, max_length=512, padding='max_length', truncation='longest_first', return_tensors="pt")
                     input_ids.append(question_inputs['input_ids'])
                     token_type_ids.append(question_inputs['token_type_ids'])
                     attention_masks.append(question_inputs['attention_mask'])
@@ -198,10 +205,16 @@ class ColBERT_retriever_Base_BERT_reader_trainer(Trainer):
                 tensor_input_ids = torch.stack(input_ids, dim=0)
                 tensor_token_type_ids = torch.stack(token_type_ids, dim=0)
                 tensor_attention_masks = torch.stack(attention_masks, dim=0)
+                #retriever_scores = torch.stack(retriever_scores, dim=0)
                 with torch.no_grad():
                     output = self.reader.model(
                         input_ids=tensor_input_ids.to(device), attention_mask=tensor_token_type_ids.to(device), token_type_ids=tensor_attention_masks.to(device))
-                loss = criterion(output, answers_indexes.to(device))
+                # loss = criterion(output, answers_indexes.to(device))
+                retriever_score = 0 # log_softmax(retriever_scores)
+                reader_score = log_softmax(output)
+                sum_score = retriever_score + reader_score
+                loss = criterion(sum_score, answers_indexes.to(device))
+
                 if self.num_gpus > 1:
                     loss = loss.mean()
                 # Accumulate the validation loss.
@@ -209,15 +222,13 @@ class ColBERT_retriever_Base_BERT_reader_trainer(Trainer):
 
                 # Move logits and labels to CPU
                 if device.type == 'cpu':
-                    output = output.numpy()
+                    output = sum_score.numpy()
                     answers_indexes = answers_indexes.numpy()
                 else:
-                    output = output.detach().cpu().numpy()
+                    output = sum_score.detach().cpu().numpy()
                     answers_indexes = answers_indexes.to('cpu').numpy()
                 total_eval_accuracy += self.calculate_accuracy(
                     output, answers_indexes)
-
-                break
 
             # Report the final accuracy for this validation run.
             avg_val_accuracy = total_eval_accuracy / len(val_dataloader)
@@ -244,8 +255,6 @@ class ColBERT_retriever_Base_BERT_reader_trainer(Trainer):
                 }
             )
 
-            print(f"Num of issues: {self.retriever.score_calc.issue_counter}")
-
         print("Training complete!")
 
         total_training_time = self.format_time(time.time()-total_t0)
@@ -255,16 +264,16 @@ class ColBERT_retriever_Base_BERT_reader_trainer(Trainer):
         now = datetime.datetime.now()
         dt_string = now.strftime("%Y-%m-%d_%H:%M:%S")
         # saving training stats
-        training_stats_file = f"src/trainer/results/{dt_string}__REALM_like+base_BERT__training_stats.json"
+        training_stats_file = f"src/results/colbert-based/{dt_string}__ColBERT__base_BERT.json"
         with open(training_stats_file, 'w') as results_file:
             json.dump(training_info, results_file)
         print(f"Results saved in {training_stats_file}")
         # saving the retriever's q_encoder weights
-        retriever_file_name = f"src/trainer/results/{dt_string}__REALM_like+base_BERT__retriever.pth"
-        torch.save(self.retriever.q_encoder.state_dict(), retriever_file_name)
+        retriever_file_name = f"src/results/colbert-based/{dt_string}__ColBERT__base_BERT__retriever.pth"
+        torch.save(self.retriever.q_embedder.state_dict(), retriever_file_name)
         print(f"Q_encoder weights saved in {retriever_file_name}")
         # saving the reader weights
-        reader_file_name = f"src/trainer/results/{dt_string}__REALM_like+base_BERT__reader.pth"
+        reader_file_name = f"src/results/colbert-based/{dt_string}__ColBERT__base_BERT__reader.pth"
         torch.save(self.reader.model.state_dict(), reader_file_name)
         print(f"Reader weights saved in {retriever_file_name}")
 

@@ -15,7 +15,7 @@ from utils.general_utils import remove_duplicates_preserve_order
 class ColBERTe2eTrainer(Trainer):
     def __init__(self, questions: MedQAQuestions, retriever: ColBERTRetriever, num_epochs: int, batch_size: int, lr: float) -> None:
         super().__init__(questions, retriever, None, num_epochs, batch_size, lr)
-        self.batch_size = 4
+        self.batch_size = 32
         self.num_train_questions = len(self.questions_train)
         self.num_val_questions = len(self.questions_val)
 
@@ -46,6 +46,8 @@ class ColBERTe2eTrainer(Trainer):
         torch.cuda.manual_seed_all(seed_val)
 
         training_info = {
+            "batch_size": self.batch_size,
+            "lr": self.lr,
             "retriever": self.retriever.get_info(),
             "reader": "None - ColBERT e2e",
             "total_training_time": None,
@@ -59,7 +61,7 @@ class ColBERTe2eTrainer(Trainer):
 
         total_steps = self.num_epochs * self.batch_size
         scheduler = get_linear_schedule_with_warmup(optimizer,
-                                                    num_warmup_steps=0,
+                                                    num_warmup_steps=500,
                                                     num_training_steps=total_steps)
 
         train_dataloader, val_dataloader = self.pepare_data_loader()
@@ -69,7 +71,7 @@ class ColBERTe2eTrainer(Trainer):
             total_train_loss = 0
             self.retriever.colbert.train()
             for step, batch in enumerate(train_dataloader):
-                if step % 10 == 0 and not step == 0:
+                if step % 50 == 0 and not step == 0:
                     elapsed = self.format_time(time.time() - t0)
                     print(
                         f'Batch {step} of {len(train_dataloader)}. Elapsed: {elapsed}')
@@ -85,36 +87,10 @@ class ColBERTe2eTrainer(Trainer):
                     ### BEGINNING OF DOCUMENT RETRIEVAL ###
                     metamap_phrases[q_idx] = remove_duplicates_preserve_order(metamap_phrases[q_idx])
                     query = ' '.join(metamap_phrases[q_idx])
-                    query_options = [x + ' ' + query for x in options[q_idx]]
-
+                    query_options = [query + f' {self.retriever.tokenizer.option_token} ' + x for x in options[q_idx]]
+                    # query_options = ['[unused5] ' + x + ' [unused6] ' + query for x in options[q_idx]]
                     retrieved_documents, scores = self.retriever.retrieve_documents(query_options)
-                    scores_mean = torch.mean(torch.stack(scores), dim=1)
-                    ### END OF DOCUMENT RETRIEVAL ###
-
-                    # ### BEGINNING OF RECALCULATING RETRIEVED DOCUMENTS SCORES
-                    # num_docs_retrieved = self.retriever.num_documents_reader
-                    # q_ids, q_mask = self.retriever.tokenizer.tensorize_queries(query_options)
-
-                    # retrieved_documents_reshaped = []
-                    
-                    # for i in range(len(retrieved_documents[0])):
-                    #     for j in range(len(retrieved_documents)):
-                    #         retrieved_documents_reshaped.append(retrieved_documents[j][i])
-
-                    # d_ids, d_mask = self.retriever.tokenizer.tensorize_documents(retrieved_documents_reshaped)
-                    # d_ids, d_mask = d_ids.view(num_docs_retrieved, len(query_options), -1), d_mask.view(num_docs_retrieved, len(query_options), -1)
-                    
-                    # d_ids_stacked = [d_ids[i] for i in range(num_docs_retrieved)]
-                    # d_mask_stacked = [d_mask[i] for i in range(num_docs_retrieved)]
-
-                    # q_ids_stacked = [q_ids for i in range(num_docs_retrieved)]
-                    # q_mask_stacked = [q_mask for i in range(num_docs_retrieved)]
-                                
-                    # Q = (torch.cat(q_ids_stacked), torch.cat(q_mask_stacked))
-                    # D = (torch.cat(d_ids_stacked), torch.cat(d_mask_stacked))
-
-                    # test = self.retriever.colbert(Q, D).view(num_docs_retrieved, -1).permute(1, 0)
-                    # test_mean = torch.mean(test, dim=1).unsqueeze(0)
+                    scores_mean = torch.mean((scores), dim=1)
                     results.append(scores_mean)
 
 
@@ -155,7 +131,7 @@ class ColBERTe2eTrainer(Trainer):
 
             # Evaluate data for one epoch
             for step, batch in enumerate(val_dataloader):
-                if step % 10 == 0 and not step == 0:
+                if step % 50 == 0 and not step == 0:
                     elapsed = self.format_time(time.time() - t0)
                     print(
                         f'Batch {step} of {len(val_dataloader)}. Elapsed: {elapsed}')
@@ -171,11 +147,12 @@ class ColBERTe2eTrainer(Trainer):
                         ### BEGINNING OF DOCUMENT RETRIEVAL ###
                         metamap_phrases[q_idx] = remove_duplicates_preserve_order(metamap_phrases[q_idx])
                         query = ' '.join(metamap_phrases[q_idx])
-                        query_options = [x + ' ' + query for x in options[q_idx]]
+                        query_options = [query + f' {self.retriever.tokenizer.option_token} ' + x for x in options[q_idx]]
+                        # query_options = ['[unused5] ' + x + ' [unused6] ' + query for x in options[q_idx]]
 
                         retrieved_documents, scores = self.retriever.retrieve_documents(query_options)
                         ### END OF DOCUMENT RETRIEVAL ###
-                        scores_mean = torch.mean(torch.stack(scores), dim=1)
+                        scores_mean = torch.mean((scores), dim=1)
                         results.append(scores_mean)
                         # ### BEGINNING OF RECALCULATING RETRIEVED DOCUMENTS SCORES
                         # num_docs_retrieved = self.retriever.num_documents_reader

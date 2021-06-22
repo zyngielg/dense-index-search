@@ -1,10 +1,14 @@
 import torch
 from itertools import accumulate
+
+from torch.cuda import device_count
 from utils.general_utils import torch_percentile
+
 
 class ColBERTScoreCalculator():
     issue_counter = 0
-
+    device_counter = 0
+    num_gpu = 5
     def __init__(self, doclens, embeddings_tensor, device) -> None:
         self.device = device
         self.maxsim_dtype = torch.float32
@@ -34,7 +38,7 @@ class ColBERTScoreCalculator():
         assert len(pids) > 0
         assert Q.size(0) in [1, len(pids)]
 
-        Q = Q.contiguous().to(self.device).to(dtype=self.maxsim_dtype)
+        Q = Q.contiguous().to(dtype=self.maxsim_dtype)
         
         VIEWS_DEVICE = self.views[0].device
         DEVICE = self.device #f'cuda:{mode}'
@@ -44,42 +48,32 @@ class ColBERTScoreCalculator():
         pids = torch.tensor(pids) if type(pids) is list else pids
 
         doclens, offsets = self.doclens[pids], self.doclens_pfxsum[pids]      
-        assignments = (doclens.unsqueeze(1) > torch.tensor(self.strides).unsqueeze(0) + 1e-6).sum(-1)
-
-        one_to_n = torch.arange(len(raw_pids))
-        output_pids, output_scores, output_permutation = [], [], []
-        
-        for group_idx, stride in enumerate(self.strides):
-            inner_device_idx = group_idx % 3
+        output_scores = []
+        for i in range(Q.size(0)):
+            # inner_device_idx = i % 4
+            inner_device_idx = self.device_counter % self.num_gpu
+            self.device_counter += 1
             inner_DEVICE = torch.device(f"cuda:{inner_device_idx}")
-            locator = (assignments == group_idx)
 
-            if locator.sum() < 1e-5:
-                continue
-
-            group_pids, group_doclens, group_offsets = pids[locator], doclens[locator], offsets[locator]
-            group_Q = Q if Q.size(0) == 1 else Q[locator]
+            group_doclens, group_offsets = doclens[i], offsets[i]
+            group_Q = Q[i]
             group_Q = group_Q.to(inner_DEVICE)
             group_offsets = group_offsets.to(VIEWS_DEVICE)
             group_offsets_uniq, group_offsets_expand = torch.unique_consecutive(group_offsets, return_inverse=True)
 
             D_size = group_offsets_uniq.size(0)
-            D = torch.index_select(self.views[group_idx], 0, group_offsets_uniq, out=D_buffers[group_idx][:D_size])
+            D = torch.index_select(self.views[i], 0, group_offsets_uniq, out=D_buffers[i][:D_size])
             D = D.to(inner_DEVICE)
             D = D[group_offsets_expand.to(inner_DEVICE)].to(dtype=self.maxsim_dtype)
 
-            mask = torch.arange(stride, device=inner_DEVICE) + 1
-            mask = mask.unsqueeze(0) <= group_doclens.to(inner_DEVICE).unsqueeze(-1)
             
-            scores = (D @ group_Q) * mask.unsqueeze(-1)
+            scores = (D @ group_Q)
             scores = scores.max(1).values.sum(-1)
 
             # output_pids.append(group_pids)
             output_scores.append(scores.to('cuda:2'))
-            output_permutation.append(one_to_n[locator])
 
-        output_permutation = torch.cat(output_permutation).sort().indices
-        output_scores = torch.cat(output_scores)[output_permutation]#.tolist()
+        output_scores = torch.stack(output_scores)#.tolist()
         # output_pids = torch.cat(output_pids)[output_permutation].tolist()
 
         # assert len(raw_pids) == len(output_pids)

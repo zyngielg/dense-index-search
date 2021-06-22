@@ -10,7 +10,7 @@ def torch_percentile(tensor, p):
     return tensor.kthvalue(int(p * tensor.size(0) / 100.0)).values.item()
 
 def uniq(l):
-    l = list(set(l))
+    l = remove_duplicates_preserve_order(l)
     # ignore the last id due to the way the views are created
     if 147069 in l:
         l.remove(147069)
