@@ -22,7 +22,7 @@ class REALMLikeRetriever(Retriever):
     downloaded_model_path = "data/realm-tf-to-pytorch/"
 
     num_documents = 4
-    layers_to_not_freeze = ['8', '9', '10', '11', 'pooler', 'prediction']
+    layers_to_not_freeze = ['6', '7', '8', '9', '10', '11', 'pooler', 'prediction']
 
     faiss_index_path = "data/realm/index.index"
     document_encodings_path = "data/realm/document_embeddings_chunks_100_unprocessed.pickle"
@@ -37,8 +37,7 @@ class REALMLikeRetriever(Retriever):
 
         self.tokenizer = BertTokenizerFast(self.vocab_file_path)
         # document embedder
-        self.d_embedder = REALMEmbedder(BertConfig())
-        # query embedder
+        self.d_embedder = REALMEmbedder(BertConfig())        
         try:
             self.d_embedder.load_state_dict(
                 torch.load(self.base_weights_path))
@@ -49,7 +48,6 @@ class REALMLikeRetriever(Retriever):
                 REALMEmbedder(BertConfig()), self.downloaded_model_path)
             torch.save(self.d_embedder.state_dict(), self.base_weights_path)
             print("Initialized base model from the downloaded tensorflow checkpoint")
-        # document embedder
         self.q_embedder = REALMEmbedder(BertConfig())
         if load_weights:
             print(
@@ -63,8 +61,12 @@ class REALMLikeRetriever(Retriever):
         self.freeze_layers()
         if torch.cuda.device_count() > 1:
             print(f"Using {torch.cuda.device_count()} GPUs")
-            self.d_embedder = torch.nn.DataParallel(self.d_embedder)
-            self.q_embedder = torch.nn.DataParallel(self.q_embedder)
+            if torch.cuda.device_count() == 8:
+                self.d_embedder = torch.nn.DataParallel(self.d_embedder, device_ids=[0,1,2,3,4])
+                self.q_embedder = torch.nn.DataParallel(self.q_embedder, device_ids=[0,1,2,3,4])
+            else:
+                self.d_embedder = torch.nn.DataParallel(self.d_embedder)
+                self.q_embedder = torch.nn.DataParallel(self.q_embedder)
         self.d_embedder.to(self.device)
         self.q_embedder.to(self.device)
         # info about used chunks
@@ -90,13 +92,14 @@ class REALMLikeRetriever(Retriever):
                                          truncation=True,
                                          return_tensors="pt")
         queries_embedding = self.q_embedder(**query_tokenized)
-        queries_faiss_input = queries_embedding.cpu().numpy()
+        queries_faiss_input = queries_embedding.cpu().detach().numpy()
         scores, doc_ids = self.index.search(
             queries_faiss_input, self.num_documents)
 
         retrieved_documents = []
         for id_list in doc_ids:
-            retrieved_documents.append([self.corpus_chunks[i]['content'] for i in id_list])
+            retrieved_documents.append(
+                [self.corpus_chunks[i]['content'] for i in id_list])
 
         retrieved_documents_score_calc = [self.corpus_chunks[i]['content']
                                           for x in doc_ids for i in x]
@@ -107,6 +110,7 @@ class REALMLikeRetriever(Retriever):
                                         padding='max_length',
                                         truncation=True,
                                         return_tensors="pt")
+       
         with torch.no_grad():
             docs_embeddings = self.d_embedder(**docs_tokenized)
         docs_embeddings = docs_embeddings.view(4, 4, -1)
@@ -168,6 +172,8 @@ class REALMLikeRetriever(Retriever):
         else:
             print("******** 2. Loading faiss index ...  *****")
             self.index = faiss.read_index(self.faiss_index_path)
+            res = faiss.StandardGpuResources()  # use a single GPU
+            self.index = faiss.index_cpu_to_gpu(res, 0, self.index)
             print("********    ... index loaded ********")
 
         print("*** Finished Preparing the REALM-like retriever ***")
@@ -190,13 +196,12 @@ class REALMLikeRetriever(Retriever):
                                                return_tensors="pt")
             with torch.no_grad():
                 embeddings = self.d_embedder(**content_tokenized)
-            self.document_embeddingsdocument_embeddings[i:i +
-                                                        batch_size] = embeddings.cpu()
+            self.document_embeddings[i:i + batch_size] = embeddings.cpu()
 
         print("********     ... chunks' embeddings created ********")
 
         print("******** 1b. Saving chunk embeddings to file ... ********")
-        save_pickle(self.chunks_embeddings,
+        save_pickle(self.document_embeddings,
                     file_path=self.document_encodings_path)
         print("********     ... embeddings saved *********")
 

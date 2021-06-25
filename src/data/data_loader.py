@@ -1,4 +1,4 @@
-from torch.utils.data import DataLoader, Dataset, SequentialSampler, TensorDataset, dataset
+from torch.utils.data import DataLoader, Dataset, SequentialSampler, TensorDataset, dataset, RandomSampler
 from tqdm import tqdm
 
 
@@ -47,7 +47,7 @@ def create_medqa_data_loader(input_queries, input_answers, input_answers_idx, ba
                            answers_idx=input_answers_idx)
 
     return DataLoader(dataset=dataset,
-                      sampler=SequentialSampler(dataset),
+                      sampler=RandomSampler(dataset),
                       batch_size=batch_size)
 
 

@@ -66,7 +66,7 @@ class IR_ES(Retriever):
                                   index_name=self.index_name,
                                   index_body=create_index_body)
 
-    def create_tokenized_input(self, questions, tokenizer, docs_flag, num_questions):
+    def create_tokenized_input(self, questions, tokenizer, docs_flag, num_questions, medqa=True):
         question_token_id = tokenizer.convert_tokens_to_ids('[unused5]')
         answer_token_id = tokenizer.convert_tokens_to_ids('[unused6]')
 
@@ -81,6 +81,7 @@ class IR_ES(Retriever):
             if int(question_id[1:]) == num_questions:
                 break
             metamap_phrases = question_data['metamap_phrases']
+            question_raw = question_data["question"]
 
             input_ids = []
             token_type_ids = []
@@ -95,16 +96,16 @@ class IR_ES(Retriever):
                     question_id=question_id,
                     option=option,
                     retrieved_docs_flag=docs_flag)
-
-                query = f"{medqa_string} . {option}"
+                if medqa:
+                    query = f"{option} . {medqa_string}"
+                else:
+                    query = f"{option} . {question_raw}"
                 tokenized_option_len = len(tokenizer(option, add_special_tokens=False)['input_ids'])
-                tokenized_question_len = len(tokenizer(medqa_string, add_special_tokens=False)['input_ids'])
 
                 context = ' '.join(retrieved_documents)
                 query_tokenized = tokenizer(query, context, add_special_tokens=True,
-                                            max_length=512, padding='max_length', truncation=True, return_tensors="pt")
-                query_tokenized['input_ids'][:, 1 + tokenized_question_len] = answer_token_id
-                # query_tokenized['input_ids'][:, -(3+tokenized_question_len + tokenized_option_len)] = question_token_id
+                                            max_length=512, padding='max_length', truncation='longest_first', return_tensors="pt")
+                query_tokenized['input_ids'][:, 1 + tokenized_option_len] = answer_token_id
 
                 input_ids.append(query_tokenized["input_ids"].flatten())
                 token_type_ids.append(
@@ -128,7 +129,7 @@ class IR_ES(Retriever):
 
         return input_queries, input_answers, input_answers_idx
 
-    def retrieve_documents(self, query=None, question_id=None, option=None, retrieved_docs_flag=0):
+    def retrieve_documents(self, query=None, question_id=None, option=None, retrieved_docs_flag=0, question_raw=None):
         retrieved_documents = None
         retrieved_documents_content = None
 
@@ -145,8 +146,16 @@ class IR_ES(Retriever):
                 retrieved_docs_set = self.val_retrieved_documents
             # else:
                 # retrieved_docs_set = self.test_retrieved_documents
-            x = retrieved_docs_set[question_id]['retrieved_documents']
-            retrieved_documents = retrieved_docs_set[question_id]['retrieved_documents'][option]
+            if not question_raw:
+                retrieved_documents = retrieved_docs_set[question_id]['retrieved_documents'][option]
+            else:
+                for key, val in retrieved_docs_set.items():
+                    if val['question'] == question_raw:
+                        question_id = key
+                        break
+                x = retrieved_docs_set[key]
+                retrieved_documents = retrieved_docs_set[key]['retrieved_documents'][option]
+
         retrieved_documents_content = [
             x['evidence']['content'] for x in retrieved_documents]
         return retrieved_documents, retrieved_documents_content
@@ -170,7 +179,7 @@ class IR_ES(Retriever):
         incorrect_answer = 0
 
         for q_id, question_data in tqdm(questions.items()):
-            question = question_data['question']
+            question_raw = question_data['question']
             answer = question_data['answer']
 
             final_answer = None

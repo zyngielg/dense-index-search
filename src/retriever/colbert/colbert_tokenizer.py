@@ -1,8 +1,10 @@
-from transformers import BertTokenizerFast
+from transformers import BertTokenizerFast, BertTokenizer
 
 
 class ColbertTokenizer():
     def __init__(self, bert_name, query_maxlen, doc_maxlen):
+        self.option_token = "[unused10]"
+        
         self.query_tokenizer = BertTokenizerFast.from_pretrained(bert_name)
         self.doc_tokenizer = BertTokenizerFast.from_pretrained(bert_name)
 
