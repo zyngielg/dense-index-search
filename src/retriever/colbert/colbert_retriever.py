@@ -23,16 +23,15 @@ class ColBERTRetriever(Retriever):
     base_weights_base_path = "data/colbert/colbert-base-bert-200000.dnn"
     q_encoder_weights_path = ""
 
-    num_documents_faiss = 200
+    num_documents_faiss = 1000
     num_documents_reader = 5
-    layers_to_not_freeze = ['4', '5', '6', '7', '8', '9', '10', '11', 'linear']
+    layers_to_not_freeze = ['3','4', '5', '6', '7', '8', '9', '10', '11', 'linear']
 
     stemmer = SnowballStemmer(language='english')
 
     chunk_100_unstemmed_path = "data/chunks_100_non_processed.pickle"
     chunk_150_unstemmed_path = "data/chunks_150_non_processed.pickle"
     bert_weights_path = "data/colbert-clinical-biobert-cosine-200000.dnn"
-    # bert_weights_path = "data/colbert-base-bert-200000.dnn"
 
     faiss_index_path = "data/colbert/index_[colbert][clinicalbiobert200000][cosine-sim][chunks100unprocessed].index"
     document_embeddings_path = "data/colbert/document_embeddings_[colbert][clinicalbiobert200000][cosine-sim][chunks100unprocessed].pickle"
@@ -74,6 +73,7 @@ class ColBERTRetriever(Retriever):
                 self.document_embeddings_tensor_path = "data/colbert/document_embeddings_tensor[clinicalbiobert200000].pt"
                 self.embbedding2doc_id_path = "data/colbert/embbedding2doc_id_[colbert][clinicalbiobert200000][cosine-sim][chunks100unprocessed].pickle"
                 self.doc_embeddings_lengths_path = "data/colbert/document_embeddings_lengths_[colbert][clinicalbiobert200000][cosine-sim][chunks100unprocessed].pickle"
+                self.base_weights_used = self.base_weights_bio_path
             else:
                 print(
                     f"Loading trained base-bert weights from {self.base_weights_base_path}")
@@ -84,6 +84,7 @@ class ColBERTRetriever(Retriever):
                 self.document_embeddings_tensor_path = "data/colbert/document_embeddings_tensor[basebert200000].pt"
                 self.embbedding2doc_id_path = "data/colbert/embbedding2doc_id_[colbert][basebert200000][cosine-sim][chunks100unprocessed].pickle"
                 self.doc_embeddings_lengths_path = "data/colbert/document_embeddings_lengths_[colbert][basebert200000][cosine-sim][chunks100unprocessed].pickle"
+                self.base_weights_used = self.base_weights_base_path
 
         if torch.cuda.device_count() > 1:
             print(f"Using {torch.cuda.device_count()} GPUs")
@@ -131,7 +132,7 @@ class ColBERTRetriever(Retriever):
         info['num documents faiss'] = self.num_documents_faiss
         info['num documents retrieved'] = self.num_documents_reader
 
-        info['colbert'] = self.bert_name
+        info['colbert'] = self.base_weights_used
         info['layers not to freeze'] = self.layers_to_not_freeze
         info['weights loaded'] = self.load_weights
         if self.load_weights:
@@ -157,8 +158,8 @@ class ColBERTRetriever(Retriever):
         # embedding_ids_to_pids
         doc_ids = self.embbedding2doc_id[embeddings_ids].tolist()
         doc_ids = list(map(uniq, doc_ids))
-        doc_ids_min = len(min(doc_ids, key=len)) // 2
-        doc_ids_min = doc_ids_min if doc_ids_min < 1000 else 1000 
+        doc_ids_min = len(min(doc_ids, key=len))
+        doc_ids_min = doc_ids_min if doc_ids_min < 2500 else 2500 
         doc_ids = [x[:doc_ids_min] for x in doc_ids]
 
         # rank

@@ -52,18 +52,19 @@ class ColBERT_retriever_Base_BERT_reader_trainer(Trainer):
             "total_training_time": None,
             "training_stats": []
         }
+        train_dataloader, val_dataloader = self.pepare_data_loader()
+
         log_softmax = torch.nn.LogSoftmax(dim=1)
         criterion = torch.nn.CrossEntropyLoss()
         params = list(self.retriever.colbert.parameters()) + \
             list(self.reader.model.parameters())
         optimizer = torch.optim.AdamW(params, lr=self.lr)
 
-        total_steps = self.num_epochs * self.batch_size
+        total_steps = self.num_epochs * len(train_dataloader)
         scheduler = get_linear_schedule_with_warmup(optimizer,
-                                                    num_warmup_steps=0,
+                                                    num_warmup_steps=1000,
                                                     num_training_steps=total_steps)
 
-        train_dataloader, val_dataloader = self.pepare_data_loader()
 
         for epoch in range(self.num_epochs):
             print(f'======== Epoch {epoch + 1} / {self.num_epochs} ========')
@@ -78,9 +79,6 @@ class ColBERT_retriever_Base_BERT_reader_trainer(Trainer):
                         f'Batch {step} of {len(train_dataloader)}. Elapsed: {elapsed}')
 
                 optimizer.zero_grad()
-                # self.reader.model.zero_grad()
-                # self.retriever.q_encoder.zero_grad()
-
                 questions = batch[0]
                 answers_indexes = batch[2]
                 options = [x.split('#') for x in batch[3]]
@@ -95,7 +93,7 @@ class ColBERT_retriever_Base_BERT_reader_trainer(Trainer):
                     query = ' '.join(metamap_phrases[q_idx])
                     query_options = ['[unused4] ' + x + ' [unused5] ' + query for x in options[q_idx]]
                     retrieved_documents, scores = self.retriever.retrieve_documents(query_options)
-                    # retriever_scores.append(torch.mean(scores, dim=1))
+                    retriever_scores.append(torch.mean(scores, dim=1))
                         
                     contexts = []
                     for idx in range(len(retrieved_documents)):
@@ -113,25 +111,26 @@ class ColBERT_retriever_Base_BERT_reader_trainer(Trainer):
                 tensor_input_ids = torch.stack(input_ids, dim=0)
                 tensor_token_type_ids = torch.stack(token_type_ids, dim=0)
                 tensor_attention_masks = torch.stack(attention_masks, dim=0)
-                # retriever_scores = torch.stack(retriever_scores, dim=0)
+                retriever_scores = torch.stack(retriever_scores, dim=0)
 
                 output = self.reader.model(
                     input_ids=tensor_input_ids.to(device), attention_mask=tensor_token_type_ids.to(device), token_type_ids=tensor_attention_masks.to(device))
 
-                #retriever_score = log_softmax(retriever_scores)
+                retriever_score = log_softmax(retriever_scores)
                 reader_score = log_softmax(output)
-                #sum_score = retriever_score.to(device) + reader_score
-                #loss = criterion(sum_score, answers_indexes.to(device))
-                
-                loss = criterion(output, answers_indexes.to(device))
+                sum_score =  reader_score + retriever_score.to(device)
+                loss = criterion(sum_score, answers_indexes.to(device))
+                # loss = criterion(output, answers_indexes.to(device))
                 if self.num_gpus > 1:
                     loss = loss.mean()
                 total_train_loss += loss.item()
                 loss.backward()
                 # Clip the norm of the gradients to 1.0.
                 # This is to help prevent the "exploding gradients" problem.
-                # torch.nn.utils.clip_grad_norm_(
-                #     self.reader.model.parameters(), 1.0)
+                torch.nn.utils.clip_grad_norm_(
+                    self.reader.model.parameters(), 1.0)
+                torch.nn.utils.clip_grad_norm_(
+                    self.retriever.colbert.parameters(), 1.0)
 
                 # Update parameters and take a step using the computed gradient.
                 # The optimizer dictates the "update rule"--how the parameters are
@@ -181,14 +180,14 @@ class ColBERT_retriever_Base_BERT_reader_trainer(Trainer):
                 input_ids = []
                 token_type_ids = []
                 attention_masks = []
-                #retriever_scores = []
+                retriever_scores = []
                 for q_idx in range(len(questions)):
                     query = ' '.join(metamap_phrases[q_idx])
 
                     query_options = [x + ' [unused5]  ' + query for x in options[q_idx]]
                     with torch.no_grad():
                         retrieved_documents, scores = self.retriever.retrieve_documents(query_options)
-                    #retriever_scores.append(torch.mean(scores, dim=1))
+                    retriever_scores.append(torch.mean(scores, dim=1))
                     contexts = []
                     for idx in range(len(retrieved_documents)):
                         option_documents = []
@@ -205,14 +204,14 @@ class ColBERT_retriever_Base_BERT_reader_trainer(Trainer):
                 tensor_input_ids = torch.stack(input_ids, dim=0)
                 tensor_token_type_ids = torch.stack(token_type_ids, dim=0)
                 tensor_attention_masks = torch.stack(attention_masks, dim=0)
-                #retriever_scores = torch.stack(retriever_scores, dim=0)
+                retriever_scores = torch.stack(retriever_scores, dim=0)
                 with torch.no_grad():
                     output = self.reader.model(
                         input_ids=tensor_input_ids.to(device), attention_mask=tensor_token_type_ids.to(device), token_type_ids=tensor_attention_masks.to(device))
                 # loss = criterion(output, answers_indexes.to(device))
-                retriever_score = 0 # log_softmax(retriever_scores)
+                retriever_score = log_softmax(retriever_scores)
                 reader_score = log_softmax(output)
-                sum_score = retriever_score + reader_score
+                sum_score = reader_score + retriever_score.to(device)
                 loss = criterion(sum_score, answers_indexes.to(device))
 
                 if self.num_gpus > 1:
@@ -270,7 +269,7 @@ class ColBERT_retriever_Base_BERT_reader_trainer(Trainer):
         print(f"Results saved in {training_stats_file}")
         # saving the retriever's q_encoder weights
         retriever_file_name = f"src/results/colbert-based/{dt_string}__ColBERT__base_BERT__retriever.pth"
-        torch.save(self.retriever.q_embedder.state_dict(), retriever_file_name)
+        torch.save(self.retriever.colbert.state_dict(), retriever_file_name)
         print(f"Q_encoder weights saved in {retriever_file_name}")
         # saving the reader weights
         reader_file_name = f"src/results/colbert-based/{dt_string}__ColBERT__base_BERT__reader.pth"

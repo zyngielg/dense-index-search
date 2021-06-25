@@ -13,9 +13,6 @@ from retriever.retriever import Retriever
 from trainer.trainer import Trainer
 from transformers import get_linear_schedule_with_warmup
 
-# TODO: currently after 3 epochs the loss and the accuracy remain the same
-# check whether the input to BERT should be reformatted compared to the current one
-
 
 class IrEsBaseBertTrainer(Trainer):
     def __init__(self, questions: MedQAQuestions, retriever: Retriever, reader: Reader, num_epochs: int, batch_size: int, lr: float) -> None:
@@ -27,7 +24,8 @@ class IrEsBaseBertTrainer(Trainer):
             questions=self.questions_train,
             tokenizer=self.reader.tokenizer,
             docs_flag=0,
-            num_questions=len(self.questions_train))
+            num_questions=len(self.questions_train),
+            medqa=False)
 
         train_dataloader = create_medqa_data_loader(input_queries=train_input_queries, input_answers=train_input_answers,
                                                     input_answers_idx=train_input_answers_idx, batch_size=self.batch_size)
@@ -39,7 +37,8 @@ class IrEsBaseBertTrainer(Trainer):
             questions=self.questions_val,
             tokenizer=self.reader.tokenizer,
             docs_flag=1,
-            num_questions=len(self.questions_val))
+            num_questions=len(self.questions_val),
+            medqa=False)
         val_dataloader = create_medqa_data_loader(input_queries=val_input_queries, input_answers=val_input_answers,
                                                   input_answers_idx=val_input_answers_idx, batch_size=self.batch_size)
         print("********* ... val dataloader created  *********")
@@ -67,7 +66,7 @@ class IrEsBaseBertTrainer(Trainer):
         optimizer = torch.optim.AdamW(
             self.reader.model.parameters(), lr=self.lr)
 
-        total_steps = self.num_epochs * len(train_dataloader) / self.batch_size
+        total_steps = self.num_epochs * len(train_dataloader)
         scheduler = get_linear_schedule_with_warmup(optimizer,
                                                     num_warmup_steps=1000,
                                                     num_training_steps=total_steps)
@@ -78,6 +77,7 @@ class IrEsBaseBertTrainer(Trainer):
             print("****** Training ******")
             self.reader.model.train()
             total_train_loss = 0
+            total_train_accuracy = 0
             for step, batch in enumerate(train_dataloader):
                 if step % 25 == 0 and not step == 0:
                     elapsed = self.format_time(time.time() - t0)
@@ -110,13 +110,24 @@ class IrEsBaseBertTrainer(Trainer):
                 optimizer.step()
                 scheduler.step()
 
+                if device.type == 'cpu':
+                    output = output.numpy()
+                    answers_indexes = answers_indexes.numpy()
+                else:
+                    output = output.detach().cpu().numpy()
+                    answers_indexes = answers_indexes.to('cpu').numpy()
+                total_train_accuracy += self.calculate_accuracy(
+                    output, answers_indexes)
+
             # Calculate the average loss over all of the batches.
             avg_train_loss = total_train_loss / len(train_dataloader)
+            avg_train_accuracy = total_train_accuracy / len(train_dataloader)
 
             # Measure how long this epoch took.
             training_time = self.format_time(time.time() - t0)
 
             print("\tAverage training loss: {0:.4f}".format(avg_train_loss))
+            print("  Accuracy: {0:.4f}".format(avg_train_accuracy))
             print("\tTraining epoch took: {:}".format(training_time))
 
             print("****** Validation ******")
@@ -181,8 +192,9 @@ class IrEsBaseBertTrainer(Trainer):
                 {
                     'epoch': epoch + 1,
                     'Training Loss': avg_train_loss,
-                    'Valid. Loss': avg_val_loss,
-                    'Valid. Accur.': avg_val_accuracy,
+                    'Training Accuracy': avg_train_accuracy,
+                    'Validation Loss': avg_val_loss,
+                    'Validation Accuracy': avg_val_accuracy,
                     'Training Time': training_time,
                     'Validation Time': validation_time
                 }

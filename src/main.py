@@ -10,7 +10,7 @@ from reader.base_bert_reader import Base_BERT_Reader
 # TODO: move to separate config file
 num_epochs = 4
 batch_size = 32
-lr = 2e-5
+lr = 4e-5
 
 
 def parse_arguments():
