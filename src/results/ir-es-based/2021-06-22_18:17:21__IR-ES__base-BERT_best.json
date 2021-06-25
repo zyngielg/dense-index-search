@@ -1,0 +1,63 @@
+{
+    "retriever": {
+        "from es session": false,
+        "train searches loaded from": "data/es-retrieved-documents/final_es_retrieved_documents_train_chunks_100_unprocessed.pickle",
+        "val searches loaded from": "data/es-retrieved-documents/final_es_retrieved_documents_val_chunks_100_unprocessed.pickle",
+        "num of docs retrieved": 10
+    },
+    "reader": {
+        "bert type": "emilyalsentzer/Bio_ClinicalBERT",
+        "weights loaded": false,
+        "layers not to freeze": [
+            "7",
+            "8",
+            "9",
+            "10",
+            "11",
+            "linear",
+            "pooler"
+        ],
+        "medqa_or_raw_question": "questions_raw"
+    },
+    "batch_size": 32,
+    "learning_rate": 3e-5,
+    "total_training_time": "0:20:28",
+    "training_stats": [
+        {
+            "epoch": 1,
+            "Training Loss": 1.3917847471924785,
+            "Training Accuracy": 0.25156739811912227,
+            "Validation Loss": 1.3809429109096527,
+            "Validation Accuracy": 0.28854166666666664,
+            "Training Time": "0:03:42",
+            "Validation Time": "0:00:13"
+        },
+        {
+            "epoch": 2,
+            "Training Loss": 1.384761938107051,
+            "Training Accuracy": 0.27586206896551724,
+            "Validation Loss": 1.3715861141681671,
+            "Validation Accuracy": 0.315625,
+            "Training Time": "0:03:24",
+            "Validation Time": "0:00:14"
+        },
+        {
+            "epoch": 3,
+            "Training Loss": 1.3681087512581327,
+            "Training Accuracy": 0.3098550156739812,
+            "Validation Loss": 1.3540987998247147,
+            "Validation Accuracy": 0.3265625,
+            "Training Time": "0:03:23",
+            "Validation Time": "0:00:14"
+        },
+        {
+            "epoch": 4,
+            "Training Loss": 1.325900379393168,
+            "Training Accuracy": 0.35785658307210033,
+            "Validation Loss": 1.366346225142479,
+            "Validation Accuracy": 0.31927083333333334,
+            "Training Time": "0:03:23",
+            "Validation Time": "0:00:13"
+        }
+    ]
+}

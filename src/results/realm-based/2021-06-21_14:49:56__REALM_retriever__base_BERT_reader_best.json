@@ -1,0 +1,69 @@
+{
+    "retriever": {
+        "num documents retrieved": 4,
+        "bert used": "bert-base-uncased",
+        "layers not to freeze": [
+            "8",
+            "9",
+            "10",
+            "11",
+            "pooler",
+            "prediction"
+        ],
+        "weights path": "",
+        "index path": "data/realm/index.index",
+        "chunk_size_used": 100
+    },
+    "reader": {
+        "bert type": "emilyalsentzer/Bio_ClinicalBERT",
+        "weights loaded": false,
+        "layers not to freeze": [
+            "7",
+            "8",
+            "9",
+            "10",
+            "11",
+            "linear",
+            "pooler"
+        ]
+    },
+    "total_training_time": "3:55:23",
+    "training_stats": [
+        {
+            "epoch": 1,
+            "Training Loss": 1.3936089147101776,
+            "Training Accuracy": 0.25860719874804383,
+            "Valid. Loss": 1.386497216404609,
+            "Valid. Accur.": 0.2248427672955975,
+            "Training Time": "0:53:06",
+            "Validation Time": "0:06:04"
+        },
+        {
+            "epoch": 2,
+            "Training Loss": 1.3965049360272273,
+            "Training Accuracy": 0.26837530312017681,
+            "Valid. Loss": 1.3863192016973436,
+            "Valid. Accur.": 0.2429245283018868,
+            "Training Time": "0:52:46",
+            "Validation Time": "0:06:05"
+        },
+        {
+            "epoch": 3,
+            "Training Loss": 1.3946382666982635,
+            "Training Accuracy": 0.27572612487731241,
+            "Valid. Loss": 1.3860737805096608,
+            "Valid. Accur.": 0.2610062893081761,
+            "Training Time": "0:52:41",
+            "Validation Time": "0:06:05"
+        },
+        {
+            "epoch": 4,
+            "Training Loss": 1.3894247977825382,
+            "Training Accuracy": 0.28293103448275742,
+            "Valid. Loss": 1.3844910830071888,
+            "Valid. Accur.": 0.27122641509433965,
+            "Training Time": "0:52:38",
+            "Validation Time": "0:05:56"
+        }
+    ]
+}

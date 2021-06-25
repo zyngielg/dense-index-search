@@ -1,0 +1,20 @@
+{
+    "info": {
+        "from es session": false,
+        "train searches loaded from": "data/es-retrieved-documents/final_es_retrieved_documents_train_chunks_100_unprocessed.pickle",
+        "val searches loaded from": "data/es-retrieved-documents/final_es_retrieved_documents_val_chunks_100_unprocessed.pickle",
+        "num of docs retrieved": 10
+    },
+    "results": [
+        {
+            "Accuracy": 30.44802515228925,
+            "# correct": 3099,
+            "# incorrect": 7079
+        },
+        {
+            "Accuracy": 33.25471698113208,
+            "# correct": 423,
+            "# incorrect": 849
+        }
+    ]
+}
