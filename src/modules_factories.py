@@ -37,7 +37,7 @@ class ReaderRetrieverFactory():
             retriever = REALMLikeRetriever(load_weights=self.load_weights)
         elif self.retriever_choice == "ColBERT":
             retriever = ColBERTRetriever(
-                load_weights=False, biobert_or_base_bert=self.colbert_base)
+                load_weights=self.load_weights, biobert_or_base_bert=self.colbert_base)
 
         if retriever is None:
             print("Retriever has not been initialized. Check input arguments")
