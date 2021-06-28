@@ -6,9 +6,8 @@ from transformers import AutoTokenizer
 
 
 class Base_BERT_Reader(Reader):
-    # bert_name = "microsoft/BiomedNLP-PubMedBERT-base-uncased-abstract"
-    bert_name = "emilyalsentzer/Bio_ClinicalBERT"
-    # bert_name = "bert-base-uncased"
+    # bert_name = "emilyalsentzer/Bio_ClinicalBERT"
+    bert_name = "bert-base-uncased"
     # change if necessary
     weights_file_directory = "src/results/ir-es-based"
     weights_file_name = "2021-06-22_18:17:21__IR-ES__base-BERT.pth"
@@ -28,12 +27,7 @@ class Base_BERT_Reader(Reader):
             self.model.load_state_dict(saved_model)
         if torch.cuda.device_count() > 1:
             print(f"Using {torch.cuda.device_count()} GPUs")
-            if torch.cuda.device_count() == 8:
-                self.model = torch.nn.DataParallel(
-                    self.model, device_ids=[7, 6, 5])
-                self.device = torch.device('cuda:7')
-            else:
-                self.model = torch.nn.DataParallel(self.model)
+            self.model = torch.nn.DataParallel(self.model)
 
         self.freeze_layers()
         self.model.to(self.device)

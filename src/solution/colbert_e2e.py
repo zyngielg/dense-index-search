@@ -32,16 +32,11 @@ class ColBERTe2e(Solution):
             questions=self.questions_val, batch_size=self.batch_size, num_questions=self.num_val_questions)
         print("******** Val dataloader created  ********")
 
-        print("******** Creating val dataloader ********")
-        val_dataloader = create_questions_data_loader(
-            questions=self.questions_val, batch_size=self.batch_size, num_questions=self.num_val_questions)
-        print("******** Val dataloader created  ********")
-
         if not include_test:
             return train_dataloader, val_dataloader
         else:
             test_dataloader = create_questions_data_loader(
-                questions=self.questions_test, batch_size=self.batch_size, num_questions=self.num_val_questions)
+                questions=self.questions_test, batch_size=self.batch_size, num_questions=self.num_test_questions)
             return train_dataloader, val_dataloader, test_dataloader
 
     def train(self):

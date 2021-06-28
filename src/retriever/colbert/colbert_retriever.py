@@ -109,9 +109,9 @@ class ColBERTRetriever(Retriever):
                 self.q_encoder_weights_path = self.weights_file_base_path
             else:
                 print(
-                    f"Loading base biobert weights from {self.base_weights_bio_path}")
+                    f"Loading base biobert weights from {self.base_weights_base_path}")
                 ColBERT.load_checkpoint(
-                    self.base_weights_bio_path, self.colbert)
+                    self.base_weights_base_path, self.colbert)
                 self.base_weights_used = self.base_weights_base_path
 
         if torch.cuda.device_count() > 1:
@@ -187,7 +187,7 @@ class ColBERTRetriever(Retriever):
         doc_ids = self.embbedding2doc_id[embeddings_ids].tolist()
         doc_ids = list(map(uniq, doc_ids))
         doc_ids_min = len(min(doc_ids, key=len))
-        doc_ids_min = doc_ids_min if doc_ids_min < 2500 else 2500
+        doc_ids_min = doc_ids_min if doc_ids_min < 1500 else 1500
         doc_ids = [x[:doc_ids_min] for x in doc_ids]
 
         # rank

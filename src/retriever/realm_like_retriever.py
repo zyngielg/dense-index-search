@@ -16,7 +16,10 @@ from models.realm_embedder import REALMEmbedder
 class REALMLikeRetriever(Retriever):
     bert_type = "bert-base-uncased"
     base_weights_path = "data/realm/base-realm-embedder.pt"
-    saved_weighs_path = ""
+
+    weights_file_directory = "src/results/realm-based"
+    weights_file_name = "2021-06-21_14:49:56__REALM_retriever.pth"
+    saved_weights_path = f"{weights_file_directory}/{weights_file_name}"
 
     vocab_file_path = "data/realm-tf-to-pytorch/assets/vocab.txt"
     downloaded_model_path = "data/realm-tf-to-pytorch/"
@@ -31,6 +34,7 @@ class REALMLikeRetriever(Retriever):
 
     def __init__(self, load_weights=False) -> None:
         super().__init__()
+        self.load_weights = load_weights
         self.device = torch.device(
             'cuda') if torch.cuda.is_available() else torch.device('cpu')
         print("Using {} device".format(self.device))
@@ -48,12 +52,14 @@ class REALMLikeRetriever(Retriever):
                 REALMEmbedder(BertConfig()), self.downloaded_model_path)
             torch.save(self.d_embedder.state_dict(), self.base_weights_path)
             print("Initialized base model from the downloaded tensorflow checkpoint")
+        
         self.q_embedder = REALMEmbedder(BertConfig())
         if load_weights:
             print(
-                f"[q_embedder] Loading saved model weights from {self.saved_weighs_path}")
-            self.q_embedder.load_state_dict(
-                torch.load(self.saved_weighs_path))
+                f"[q_embedder] Loading saved model weights from {self.saved_weights_path}")
+            saved_model = torch.load(self.saved_weights_path)
+            saved_model = {key.replace("module.", ""): value for key, value in saved_model.items()}
+            self.q_embedder.load_state_dict(saved_model)
         else:
             self.q_embedder.load_state_dict(torch.load(self.base_weights_path))
             print(
@@ -69,7 +75,6 @@ class REALMLikeRetriever(Retriever):
                 self.q_embedder = torch.nn.DataParallel(self.q_embedder)
         self.d_embedder.to(self.device)
         self.q_embedder.to(self.device)
-        # info about used chunks
         self.used_chunks_size = 100
 
     def get_info(self):
@@ -78,7 +83,8 @@ class REALMLikeRetriever(Retriever):
 
         info['bert used'] = self.bert_type
         info['layers not to freeze'] = self.layers_to_not_freeze
-        info['weights path'] = self.saved_weighs_path
+        if self.load_weights:
+            info['weights path'] = self.saved_weights_path
         info['index path'] = self.faiss_index_path
         info['chunk_size_used'] = self.used_chunks_size
 
@@ -208,9 +214,6 @@ class REALMLikeRetriever(Retriever):
     def __preprocess_content(self, content, remove_stopwords, stemming, remove_punctuation):
         if not remove_stopwords and not stemming and not remove_punctuation:
             return content.lower().strip()
-        # if remove_punctuation:
-        #     content = content.translate(punctuation).replace(
-        #         '“', '').replace('’', '')
         sentences = sent_tokenize(content.lower().strip())
         cleaned_sentences = []
 

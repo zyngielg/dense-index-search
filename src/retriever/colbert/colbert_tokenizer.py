@@ -20,9 +20,6 @@ class ColbertTokenizer():
         self.sep_token, self.sep_token_id = self.doc_tokenizer.sep_token, self.doc_tokenizer.sep_token_id
         self.mask_token, self.mask_token_id = self.doc_tokenizer.mask_token, self.doc_tokenizer.mask_token_id
 
-        assert self.Q_marker_token_id == 1
-        assert self.D_marker_token_id == 2
-        assert self.mask_token_id == 103
 
     def tensorize_documents(self, documents):
         # add placehold for the [D] marker
