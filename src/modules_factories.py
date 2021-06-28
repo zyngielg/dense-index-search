@@ -47,13 +47,13 @@ class ReaderRetrieverFactory():
                 f"*** Initialized retriever {retriever.__class__.__name__} ***")
             return retriever
 
-    def create_reader(self, load_weights=False) -> Reader:
+    def create_reader(self) -> Reader:
         reader = None
 
         if self.reader_choice == "Base-BERT":
-            reader = Base_BERT_Reader(load_weights=load_weights)
+            reader = Base_BERT_Reader(load_weights=self.load_weights)
         elif self.reader_choice == "BERT-for-multiple-choice":
-            reader = BERT_multiple_choice_reader(load_weights=load_weights)
+            reader = BERT_multiple_choice_reader(load_weights=self.load_weights)
 
         if reader is None:
             print("Reader has not been initialized. Check input arguments")

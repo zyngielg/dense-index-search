@@ -29,6 +29,8 @@ def parse_arguments():
                         type=int, default=32, help="Batch size")
     parser.add_argument('--num_epochs', dest="num_epochs",
                         type=int, default=4, help="Number of epochs")
+    parser.add_argument("--load_weights", dest="load_weights", default=False, action='store_true',
+                        help="Flag indicating whether to load trained weights")
     return parser.parse_args()
 
 
@@ -37,8 +39,10 @@ if __name__ == "__main__":
     medqa_questions = MedQAQuestions(args.questions_filtered, stemming=False)
     medqa_corpus = MedQACorpus(stemming=False)
 
-    retriever_reader_factory = ReaderRetrieverFactory(
-        retriever_choice=args.retriever, reader_choice=args.reader, colbert_base=args.colbert_base)
+    retriever_reader_factory = ReaderRetrieverFactory(retriever_choice=args.retriever,
+                                                      reader_choice=args.reader, 
+                                                      load_weights=args.load_weights,
+                                                      colbert_base=args.colbert_base)
     retriever = retriever_reader_factory.create_retriever()
     retriever.prepare_retriever(
         corpus=None, create_encodings=False, create_index=False)

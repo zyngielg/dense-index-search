@@ -1,4 +1,6 @@
 import datetime
+import numpy as np
+import random
 import torch
 
 from abc import ABC, abstractclassmethod
@@ -24,6 +26,12 @@ class Solution(ABC):
             list(self.questions_train.values())[0]['options'])
         self.num_gpus = torch.cuda.device_count()
 
+        seed_val = 42
+        random.seed(seed_val)
+        np.random.seed(seed_val)
+        torch.manual_seed(seed_val)
+        torch.cuda.manual_seed_all(seed_val)
+
     @abstractclassmethod
     def train(self):
         print("***** Running training *****")
@@ -44,6 +52,9 @@ class Solution(ABC):
         return str(datetime.timedelta(seconds=elapsed_rounded))
 
     @staticmethod
-    def calculate_accuracy(predictions_distribution, correct_answers):
+    def calculate_accuracy(predictions_distribution, correct_answers, return_predictions = False):
         predictions = argmax(predictions_distribution, axis=1)
-        return sum(predictions == correct_answers) / len(correct_answers)
+        if not return_predictions:
+            return sum(predictions == correct_answers) / len(correct_answers)
+        else:
+            return sum(predictions == correct_answers) / len(correct_answers), predictions

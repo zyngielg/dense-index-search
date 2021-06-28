@@ -6,6 +6,7 @@ import time
 import torch
 from torch.utils.data import dataloader
 
+from collections import Counter
 from data.data_loader import create_medqa_data_loader
 from data.medqa_questions import MedQAQuestions
 from reader.reader import Reader
@@ -18,7 +19,7 @@ class IrEsBaseBert(Solution):
     def __init__(self, questions: MedQAQuestions, retriever: Retriever, reader: Reader, num_epochs: int, batch_size: int, lr: float) -> None:
         super().__init__(questions, retriever, reader, num_epochs, batch_size, lr)
 
-    def pepare_data_loader(self):
+    def pepare_data_loader(self, include_test=False):
         print("********* Creating train dataloader ... *********")
         train_input_queries, train_input_answers, train_input_answers_idx = self.retriever.create_tokenized_input(
             questions=self.questions_train,
@@ -42,16 +43,22 @@ class IrEsBaseBert(Solution):
         val_dataloader = create_medqa_data_loader(input_queries=val_input_queries, input_answers=val_input_answers,
                                                   input_answers_idx=val_input_answers_idx, batch_size=self.batch_size)
         print("********* ... val dataloader created  *********")
-        return train_dataloader, val_dataloader
+        if not include_test:
+            return train_dataloader, val_dataloader
+        else:
+            test_input_queries, test_input_answers, test_input_answers_idx = self.retriever.create_tokenized_input(
+                questions=self.questions_test,
+                tokenizer=self.reader.tokenizer,
+                docs_flag=2,
+                num_questions=len(self.questions_test),
+                medqa=False)
+            test_dataloader = create_medqa_data_loader(input_queries=test_input_queries, input_answers=test_input_answers,
+                                                       input_answers_idx=test_input_answers_idx, batch_size=self.batch_size)
+            return train_dataloader, val_dataloader, test_dataloader
 
     def train(self):
         super().train()
         device = self.reader.device
-        seed_val = 42
-        random.seed(seed_val)
-        np.random.seed(seed_val)
-        torch.manual_seed(seed_val)
-        torch.cuda.manual_seed_all(seed_val)
         total_t0 = time.time()
 
         training_info = {
@@ -218,4 +225,84 @@ class IrEsBaseBert(Solution):
         print("***** Training completed *****")
 
     def qa(self):
-        pass
+        total_t0 = time.time()
+        device = self.reader.device
+        qa_info = {
+            "retriever": self.retriever.get_info(),
+            "reader": self.reader.get_info(),
+            "total_training_time": None,
+            "training_stats": []
+        }
+        self.reader.model.eval()
+        train_dataloader, val_dataloader, test_dataloader = self.pepare_data_loader(
+            True)
+
+        print("*** QA for training set")
+        train_accuracy, train_predictions = self.__question_answering(
+            train_dataloader, device)
+        qa_info["train_accuracy"] = train_accuracy
+        qa_info["train_predictions"] = train_predictions
+
+        print("*** QA for val set")
+        val_accuracy, val_predictions = self.__question_answering(
+            val_dataloader, device)
+        qa_info["val_accuracy"] = val_accuracy
+        qa_info["val_predictions"] = val_predictions
+
+        print("*** QA for test set")
+        test_accuracy, test_predictions = self.__question_answering(
+            test_dataloader, device)
+        qa_info["test_accuracy"] = test_accuracy
+        qa_info["test_predictions"] = test_predictions
+
+        all_predictions = train_predictions + val_predictions + test_predictions
+        predictions_dist = sorted(Counter(all_predictions).items())
+        qa_info["all_predicitions_dist"] = predictions_dist
+
+        total_time = self.format_time(time.time()-total_t0)
+        qa_info['total_qa_time'] = total_time
+        now = datetime.datetime.now()
+        dt_string = now.strftime("%Y-%m-%d_%H:%M:%S")
+        qa_stats_file = f"src/results/ir-es-based/{dt_string}__QA__IR-ES__base-BERT.json"
+        with open(qa_stats_file, 'w') as results_file:
+            json.dump(qa_info, results_file)
+        print("********* QA complete *********")
+
+    def __question_answering(self, data_loader, device):
+        total_accuracy = 0
+        t0 = time.time()
+        all_predictions = []
+        for step, batch in enumerate(data_loader):
+            if step % 25 == 0 and not step == 0:
+                elapsed = self.format_time(time.time() - t0)
+                print(
+                    f'Batch {step} of {len(data_loader)}. Elapsed: {elapsed}')
+
+            questions_queries_collection = batch[0]
+            answers_indexes = batch[2]
+
+            input_ids = questions_queries_collection["input_ids"]
+            input_token_type_ids = questions_queries_collection["token_type_ids"]
+            input_attention_mask = questions_queries_collection["attention_mask"]
+
+            output = self.reader.model(input_ids=input_ids,
+                                       attention_mask=input_attention_mask,
+                                       token_type_ids=input_token_type_ids)
+
+            if device.type == 'cpu':
+                output = output.numpy()
+                answers_indexes = answers_indexes.numpy()
+            else:
+                output = output.detach().cpu().numpy()
+                answers_indexes = answers_indexes.to('cpu').numpy()
+            accuracy, predictions = self.calculate_accuracy(
+                output, answers_indexes, return_predictions=True)
+            total_accuracy += accuracy
+            all_predictions += [int(x) for x in list(predictions)]
+
+        avg_accuracy = total_accuracy / len(data_loader)
+        qa_time = self.format_time(time.time() - t0)
+
+        print(f"  Time: {qa_time}")
+        print("  Accuracy: {0:.4f}".format(avg_accuracy))
+        return avg_accuracy, all_predictions
