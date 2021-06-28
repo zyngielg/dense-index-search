@@ -1,3 +1,6 @@
+import json
+import datetime
+
 from data.medqa_questions import MedQAQuestions
 from reader.reader import Reader
 from retriever.retriever import Retriever
@@ -24,4 +27,15 @@ class IrEse2e(Solution):
         test_res = self.retriever.run_ir_es_e2e(self.questions_test,
                                                 doc_flag=2)
 
-        self.retriever.save_results(train_res, val_res, test_res)
+        self.__save_results(train_res, val_res, test_res)
+
+    def __save_results(self, train_results, val_results, test_results):
+        results = {
+            "info": self.retriever.get_info(),
+            "results": [train_results, val_results, test_results]
+        }
+        now = datetime.datetime.now()
+        dt_string = now.strftime("%Y-%m-%d_%H:%M:%S")
+        results_file = f"src/results/ir-es-based/{dt_string}__IR-ES__e2e.json"
+        with open(results_file, 'w') as results_file:
+            json.dump(results, results_file)

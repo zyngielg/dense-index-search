@@ -26,25 +26,10 @@ def parse_arguments():
     parser.add_argument(
         '--colbert_base', dest="colbert_base", help="Choise of BERT model for the ColBERT retrieval. Possible options: bio, base")
     parser.add_argument('--batch_size', dest="batch_size",
-                        default=32, help="Batch size")
+                        type=int, default=32, help="Batch size")
     parser.add_argument('--num_epochs', dest="num_epochs",
-                        default=4, help="Number of epochs")
+                        type=int, default=4, help="Number of epochs")
     return parser.parse_args()
-
-
-def qa(questions, retriever: Retriever, reader: Reader):
-    if type(retriever) == IR_ES:
-        if reader == None:
-            print('********* Running IR-ES module e2e *********')
-            print("****** Training set ******")
-            train_res = retriever.run_ir_es_e2e(
-                questions.questions_train, doc_flag=0)
-            print("****** Validation set ******")
-            val_res = retriever.run_ir_es_e2e(
-                questions=questions.questions_val, doc_flag=1)
-            retriever.save_results(train_res, val_res)
-        elif type(reader) == Base_BERT_Reader:
-            pass
 
 
 if __name__ == "__main__":
