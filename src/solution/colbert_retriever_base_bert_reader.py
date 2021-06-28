@@ -9,11 +9,11 @@ from data.data_loader import create_questions_data_loader
 from data.medqa_questions import MedQAQuestions
 from reader.base_bert_reader import Base_BERT_Reader
 from retriever.colbert.colbert_retriever import ColBERTRetriever
-from trainer.trainer import Trainer
+from solution.solution import Solution
 from transformers import get_linear_schedule_with_warmup
 from utils.general_utils import remove_duplicates_preserve_order
 
-class ColBERT_retriever_Base_BERT_reader_trainer(Trainer):
+class ColbertRetrieverBaseBertReader(Solution):
     def __init__(self, questions: MedQAQuestions, retriever: ColBERTRetriever, reader: Base_BERT_Reader, num_epochs: int, batch_size: int, lr: float) -> None:
         super().__init__(questions, retriever, reader, num_epochs, batch_size, lr)
 

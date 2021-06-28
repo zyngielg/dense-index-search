@@ -8,11 +8,11 @@ import torch
 from data.data_loader import create_questions_data_loader
 from data.medqa_questions import MedQAQuestions
 from retriever.colbert.colbert_retriever import ColBERTRetriever
-from trainer.trainer import Trainer
+from solution.solution import Solution
 from transformers import get_linear_schedule_with_warmup
 from utils.general_utils import remove_duplicates_preserve_order
 
-class ColBERTe2eTrainer(Trainer):
+class ColBERTe2e(Solution):
     def __init__(self, questions: MedQAQuestions, retriever: ColBERTRetriever, num_epochs: int, batch_size: int, lr: float) -> None:
         super().__init__(questions, retriever, None, num_epochs, batch_size, lr)
         self.batch_size = 32

@@ -8,12 +8,13 @@ from numpy import sum, argmax
 from retriever.retriever import Retriever
 
 
-class Trainer(ABC):
+class Solution(ABC):
     def __init__(self, questions: MedQAQuestions, retriever: Retriever, reader: Reader, num_epochs: int, batch_size: int, lr: float) -> None:
         super().__init__()
 
         self.questions_train = questions.questions_train
         self.questions_val = questions.questions_val
+        self.questions_test = questions.questions_test
         self.retriever = retriever
         self.reader = reader
         self.num_epochs = num_epochs
@@ -26,6 +27,10 @@ class Trainer(ABC):
     @abstractclassmethod
     def train(self):
         print("***** Running training *****")
+
+    @abstractclassmethod
+    def qa(self):
+        print("***** Running QA *****")
 
     @staticmethod
     def format_time(elapsed):

@@ -10,11 +10,11 @@ from data.data_loader import create_medqa_data_loader
 from data.medqa_questions import MedQAQuestions
 from reader.reader import Reader
 from retriever.retriever import Retriever
-from trainer.trainer import Trainer
+from solution.solution import Solution
 from transformers import get_linear_schedule_with_warmup
 
 
-class IrEsBaseBertTrainer(Trainer):
+class IrEsBaseBert(Solution):
     def __init__(self, questions: MedQAQuestions, retriever: Retriever, reader: Reader, num_epochs: int, batch_size: int, lr: float) -> None:
         super().__init__(questions, retriever, reader, num_epochs, batch_size, lr)
 
@@ -216,3 +216,6 @@ class IrEsBaseBertTrainer(Trainer):
         torch.save(self.reader.model.state_dict(), reader_file_name)
         print(f"Reader weights saved in {reader_file_name}")
         print("***** Training completed *****")
+
+    def qa(self):
+        pass

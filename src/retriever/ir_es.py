@@ -144,8 +144,8 @@ class IR_ES(Retriever):
                 retrieved_docs_set = self.train_retrieved_documents
             elif retrieved_docs_flag == 1:
                 retrieved_docs_set = self.val_retrieved_documents
-            # else:
-                # retrieved_docs_set = self.test_retrieved_documents
+            else:
+                retrieved_docs_set = self.test_retrieved_documents
             if not question_raw:
                 retrieved_documents = retrieved_docs_set[question_id]['retrieved_documents'][option]
             else:
