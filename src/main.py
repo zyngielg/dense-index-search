@@ -44,8 +44,9 @@ if __name__ == "__main__":
                                                       load_weights=args.load_weights,
                                                       colbert_base=args.colbert_base)
     retriever = retriever_reader_factory.create_retriever()
-    retriever.prepare_retriever(
-        corpus=None, create_encodings=False, create_index=False)
+    if retriever:
+        retriever.prepare_retriever(
+            corpus=None, create_encodings=False, create_index=False)
     reader = retriever_reader_factory.create_reader()
 
     solution_factory = SolutionFactory(retriever=retriever, reader=reader, questions=medqa_questions,

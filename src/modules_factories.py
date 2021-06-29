@@ -13,6 +13,7 @@ from solution.base_bert_retriever_base_bert_reader import BaseBERTRetrieverBaseB
 from solution.base_bert_retriever_bert_for_multiple_choice_reader import BaseBERTRetrieverBERTForMultipleChoiceReader
 from solution.ir_es_base_bert import IrEsBaseBert
 from solution.ir_es_e2e import IrEse2e
+from solution.random_guesser import RandomGuesser
 from solution.realm_like_retriever_base_bert_reader import REALMLikeRetrieverBaseBERTReader
 from solution.solution import Solution
 
@@ -40,8 +41,7 @@ class ReaderRetrieverFactory():
                 load_weights=self.load_weights, biobert_or_base_bert=self.colbert_base)
 
         if retriever is None:
-            print("Retriever has not been initialized. Check input arguments")
-            quit()
+            print("Retriever has not been initialized.")
         else:
             print(
                 f"*** Initialized retriever {retriever.__class__.__name__} ***")
@@ -53,10 +53,11 @@ class ReaderRetrieverFactory():
         if self.reader_choice == "Base-BERT":
             reader = Base_BERT_Reader(load_weights=self.load_weights)
         elif self.reader_choice == "BERT-for-multiple-choice":
-            reader = BERT_multiple_choice_reader(load_weights=self.load_weights)
+            reader = BERT_multiple_choice_reader(
+                load_weights=self.load_weights)
 
         if reader is None:
-            print("Reader has not been initialized. Check input arguments")
+            print("Reader has not been initialized.")
         else:
             print(f"*** Initialized reader {reader.__class__.__name__} ***")
             return reader
@@ -98,6 +99,8 @@ class SolutionFactory():
             else:
                 solution = ColBERTe2e(
                     self.questions, self.retriever, self.num_epochs, self.batch_size, self.lr)
+        else:
+            solution = RandomGuesser(self.questions, None, None, None, None, None)
 
         if solution is None:
             print("Solution has not been initialized. Check input arguments")
