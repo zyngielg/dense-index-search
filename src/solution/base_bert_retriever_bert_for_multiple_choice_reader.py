@@ -9,11 +9,11 @@ from data.data_loader import create_questions_data_loader
 from data.medqa_questions import MedQAQuestions
 from reader.bert_for_multiple_choice_reader import BERT_multiple_choice_reader
 from retriever.base_bert_retriever import BaseBertRetriever
-from trainer.trainer import Trainer
+from solution.solution import Solution
 from transformers import get_linear_schedule_with_warmup
 
 
-class BaseBERTRetrieverBERTForMultipleChoiceReaderTrainer(Trainer):
+class BaseBERTRetrieverBERTForMultipleChoiceReader(Solution):
     def __init__(self, questions: MedQAQuestions, retriever: BaseBertRetriever, reader: BERT_multiple_choice_reader, num_epochs: int, batch_size: int, lr: float) -> None:
         super().__init__(questions, retriever, reader, num_epochs, batch_size, lr)
 

@@ -7,13 +7,15 @@ from retriever.retriever import Retriever
 from reader.base_bert_reader import Base_BERT_Reader
 from reader.bert_for_multiple_choice_reader import BERT_multiple_choice_reader
 from reader.reader import Reader
-from trainer.colbert_e2e_trainer import ColBERTe2eTrainer
-from trainer.ColBERT_retriever_Base_BERT_reader_trainer import ColBERT_retriever_Base_BERT_reader_trainer
-from trainer.base_bert_retriever_base_bert_reader_trainer import BaseBERTRetrieverBaseBERTReaderTrainer
-from trainer.base_bert_retriever_bert_for_multiple_choice_reader_trainer import BaseBERTRetrieverBERTForMultipleChoiceReaderTrainer
-from trainer.ir_es_base_bert_trainer import IrEsBaseBertTrainer
-from trainer.realm_like_retriever_base_bert_reader_trainer import REALMLikeRetrieverBaseBERTReaderTrainer
-from trainer.trainer import Trainer
+from solution.colbert_e2e import ColBERTe2e
+from solution.colbert_retriever_base_bert_reader import ColbertRetrieverBaseBertReader
+from solution.base_bert_retriever_base_bert_reader import BaseBERTRetrieverBaseBERTReader
+from solution.base_bert_retriever_bert_for_multiple_choice_reader import BaseBERTRetrieverBERTForMultipleChoiceReader
+from solution.ir_es_base_bert import IrEsBaseBert
+from solution.ir_es_e2e import IrEse2e
+from solution.random_guesser import RandomGuesser
+from solution.realm_like_retriever_base_bert_reader import REALMLikeRetrieverBaseBERTReader
+from solution.solution import Solution
 
 
 class ReaderRetrieverFactory():
@@ -35,32 +37,33 @@ class ReaderRetrieverFactory():
         elif self.retriever_choice == "REALM-like":
             retriever = REALMLikeRetriever(load_weights=self.load_weights)
         elif self.retriever_choice == "ColBERT":
-            retriever = ColBERTRetriever(load_weights=False, biobert_or_base_bert=self.colbert_base)
+            retriever = ColBERTRetriever(
+                load_weights=self.load_weights, biobert_or_base_bert=self.colbert_base)
 
         if retriever is None:
-            print("Retriever has not been initialized. Check input arguments")
-            quit()
+            print("Retriever has not been initialized.")
         else:
             print(
                 f"*** Initialized retriever {retriever.__class__.__name__} ***")
             return retriever
 
-    def create_reader(self, load_weights=False) -> Reader:
+    def create_reader(self) -> Reader:
         reader = None
 
         if self.reader_choice == "Base-BERT":
-            reader = Base_BERT_Reader(load_weights=load_weights)
+            reader = Base_BERT_Reader(load_weights=self.load_weights)
         elif self.reader_choice == "BERT-for-multiple-choice":
-            reader = BERT_multiple_choice_reader(load_weights=load_weights)
+            reader = BERT_multiple_choice_reader(
+                load_weights=self.load_weights)
 
         if reader is None:
-            print("Reader has not been initialized. Check input arguments")
+            print("Reader has not been initialized.")
         else:
             print(f"*** Initialized reader {reader.__class__.__name__} ***")
             return reader
 
 
-class TrainerFactory():
+class SolutionFactory():
     def __init__(self, retriever: Retriever, reader: Reader, questions: MedQAQuestions, num_epochs: int, batch_size: int, lr: float) -> None:
         self.retriever = retriever
         self.reader = reader
@@ -69,33 +72,40 @@ class TrainerFactory():
         self.batch_size = batch_size
         self.lr = lr
 
-    def create_trainer(self) -> Trainer:
-        trainer = None
+    def create_solution(self) -> Solution:
+        solution = None
 
-        if type(self.retriever) == IR_ES and type(self.reader) == Base_BERT_Reader:
-            trainer = IrEsBaseBertTrainer(
-                self.questions, self.retriever, self.reader, self.num_epochs, self.batch_size, self.lr)
+        if type(self.retriever) == IR_ES:
+            if type(self.reader) == Base_BERT_Reader:
+                solution = IrEsBaseBert(
+                    self.questions, self.retriever, self.reader, self.num_epochs, self.batch_size, self.lr)
+            else:
+                solution = IrEse2e(self.questions, self.retriever,
+                                   self.reader, self.num_epochs, self.batch_size, self.lr)
         elif type(self.retriever) == BaseBertRetriever:
             if type(self.reader) == Base_BERT_Reader:
-                trainer = BaseBERTRetrieverBaseBERTReaderTrainer(
+                solution = BaseBERTRetrieverBaseBERTReader(
                     self.questions, self.retriever, self.reader, self.num_epochs, self.batch_size, self.lr)
             elif type(self.reader) == BERT_multiple_choice_reader:
-                trainer = BaseBERTRetrieverBERTForMultipleChoiceReaderTrainer(
+                solution = BaseBERTRetrieverBERTForMultipleChoiceReader(
                     self.questions, self.retriever, self.reader, self.num_epochs, self.batch_size, self.lr)
         elif type(self.retriever) == REALMLikeRetriever:
-            trainer = REALMLikeRetrieverBaseBERTReaderTrainer(
+            solution = REALMLikeRetrieverBaseBERTReader(
                 self.questions, self.retriever, self.reader, self.num_epochs, self.batch_size, self.lr)
         elif type(self.retriever) == ColBERTRetriever:
             if type(self.reader) == Base_BERT_Reader:
-                trainer = ColBERT_retriever_Base_BERT_reader_trainer(
+                solution = ColbertRetrieverBaseBertReader(
                     self.questions, self.retriever, self.reader, self.num_epochs, self.batch_size, self.lr)
             else:
-                trainer = ColBERTe2eTrainer(
+                solution = ColBERTe2e(
                     self.questions, self.retriever, self.num_epochs, self.batch_size, self.lr)
+        else:
+            solution = RandomGuesser(self.questions, None, None, None, None, None)
 
-        if trainer is None:
-            print("Trainer has not been initialized. Unless you aim to use one of the readers as the E2E architecture, check input arguments")
+        if solution is None:
+            print("Solution has not been initialized. Check input arguments")
             quit()
         else:
-            print(f"*** Initialized trainer {trainer.__class__.__name__} ***")
-            return trainer
+            print(
+                f"*** Initialized solution {solution.__class__.__name__} ***")
+            return solution

@@ -2,8 +2,6 @@ import numpy as np
 import torch
 import utils.es_utils as es_utils
 import utils.pickle_utils as pickle_utils
-import json
-import datetime
 from elasticsearch import Elasticsearch
 from retriever.retriever import Retriever
 from tqdm import tqdm
@@ -19,6 +17,7 @@ class IR_ES(Retriever):
 
     retrieved_documents_train_path = "data/es-retrieved-documents/final_es_retrieved_documents_train_chunks_100_unprocessed.pickle"
     retrieved_documents_val_path = "data/es-retrieved-documents/final_es_retrieved_documents_val_chunks_100_unprocessed.pickle"
+    retrieved_documents_test_path = "data/es-retrieved-documents/final_es_retrieved_documents_test_chunks_100_unprocessed.pickle"
 
     def __init__(self, from_es_session=False):
         self.from_es_session = from_es_session
@@ -29,6 +28,7 @@ class IR_ES(Retriever):
         if not self.from_es_session:
             info['train searches loaded from'] = self.retrieved_documents_train_path
             info['val searches loaded from'] = self.retrieved_documents_val_path
+            info['test searches loaded from'] = self.retrieved_documents_test_path
         else:
             info['index name'] = self.index_name
         info['num of docs retrieved'] = self.num_of_documents_to_retrieve
@@ -47,6 +47,8 @@ class IR_ES(Retriever):
                 self.retrieved_documents_train_path)
             self.val_retrieved_documents = pickle_utils.load_pickle(
                 self.retrieved_documents_val_path)
+            self.test_retrieved_documents = pickle_utils.load_pickle(
+                self.retrieved_documents_test_path)
 
     def __setup_elasticsearch(self):
         if not es_utils.check_if_index_exists(es=self.es,
@@ -100,12 +102,14 @@ class IR_ES(Retriever):
                     query = f"{option} . {medqa_string}"
                 else:
                     query = f"{option} . {question_raw}"
-                tokenized_option_len = len(tokenizer(option, add_special_tokens=False)['input_ids'])
+                tokenized_option_len = len(
+                    tokenizer(option, add_special_tokens=False)['input_ids'])
 
                 context = ' '.join(retrieved_documents)
                 query_tokenized = tokenizer(query, context, add_special_tokens=True,
                                             max_length=512, padding='max_length', truncation='longest_first', return_tensors="pt")
-                query_tokenized['input_ids'][:, 1 + tokenized_option_len] = answer_token_id
+                query_tokenized['input_ids'][:, 1 +
+                                             tokenized_option_len] = answer_token_id
 
                 input_ids.append(query_tokenized["input_ids"].flatten())
                 token_type_ids.append(
@@ -144,8 +148,8 @@ class IR_ES(Retriever):
                 retrieved_docs_set = self.train_retrieved_documents
             elif retrieved_docs_flag == 1:
                 retrieved_docs_set = self.val_retrieved_documents
-            # else:
-                # retrieved_docs_set = self.test_retrieved_documents
+            else:
+                retrieved_docs_set = self.test_retrieved_documents
             if not question_raw:
                 retrieved_documents = retrieved_docs_set[question_id]['retrieved_documents'][option]
             else:
@@ -162,17 +166,6 @@ class IR_ES(Retriever):
 
     def __calculate_score(self, retrieved_documents):
         return np.sum([doc['score'] for doc in retrieved_documents])
-
-    def save_results(self, train_results, val_results):
-        results = {
-            "info": self.get_info(),
-            "results": [train_results, val_results]
-        }
-        now = datetime.datetime.now()
-        dt_string = now.strftime("%Y-%m-%d_%H:%M:%S")
-        results_file = f"src/results/ir-es-based/{dt_string}__IR-ES__e2e.json"
-        with open(results_file, 'w') as results_file:
-            json.dump(results, results_file)
 
     def run_ir_es_e2e(self, questions, doc_flag=0):
         correct_answer = 0

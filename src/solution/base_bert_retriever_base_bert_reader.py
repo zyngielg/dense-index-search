@@ -9,12 +9,12 @@ from data.data_loader import create_questions_data_loader
 from data.medqa_questions import MedQAQuestions
 from reader.reader import Reader
 from retriever.base_bert_retriever import BaseBertRetriever
-from trainer.trainer import Trainer
+from solution.solution import Solution
 from transformers import get_linear_schedule_with_warmup
 from utils.general_utils import remove_duplicates_preserve_order
 
 
-class BaseBERTRetrieverBaseBERTReaderTrainer(Trainer):
+class BaseBERTRetrieverBaseBERTReader(Solution):
     def __init__(self, questions: MedQAQuestions, retriever: BaseBertRetriever, reader: Reader, num_epochs: int, batch_size: int, lr: float) -> None:
         super().__init__(questions, retriever, reader, num_epochs, batch_size, lr)
 

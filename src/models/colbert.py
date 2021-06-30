@@ -36,22 +36,18 @@ class ColBERT(BertPreTrainedModel):
         return output_reduced
 
     @staticmethod    
-    def load_checkpoint(path, model):
+    def load_checkpoint(path, model, base=True):
         print(f"******** Loading checkpoint from {path} ********")
+        if base:
+            checkpoint = torch.load(path, map_location='cpu')
+            state_dict = checkpoint['model_state_dict']
+            state_dict = {key.replace("module.", ""): value for key, value in checkpoint.items()}
+        else:
+            checkpoint = torch.load(path)
+            state_dict = {key.replace("module.", ""): value for key, value in checkpoint.items()}
 
-        checkpoint = torch.load(path, map_location='cpu')
-
-        state_dict = checkpoint['model_state_dict']
-        new_state_dict = OrderedDict()
-        for k, v in state_dict.items():
-            name = k
-            if k[:7] == 'module.':
-                name = k[7:]
-            new_state_dict[name] = v
-
-        checkpoint['model_state_dict'] = new_state_dict
-
+    
         try:
-            model.load_state_dict(checkpoint['model_state_dict'])
+            model.load_state_dict(state_dict)
         except:            
-            model.load_state_dict(checkpoint['model_state_dict'], strict=False)
+            model.load_state_dict(state_dict, strict=False)

@@ -16,13 +16,17 @@ from models.realm_embedder import REALMEmbedder
 class REALMLikeRetriever(Retriever):
     bert_type = "bert-base-uncased"
     base_weights_path = "data/realm/base-realm-embedder.pt"
-    saved_weighs_path = ""
+
+    weights_file_directory = "src/results/realm-based"
+    # weights_file_name = "2021-06-21_14:49:56__REALM_retriever.pth"
+    weights_file_name = "final_REALM_retriever.pth"
+    saved_weights_path = f"{weights_file_directory}/{weights_file_name}"
 
     vocab_file_path = "data/realm-tf-to-pytorch/assets/vocab.txt"
     downloaded_model_path = "data/realm-tf-to-pytorch/"
 
-    num_documents = 4
-    layers_to_not_freeze = ['6', '7', '8', '9', '10', '11', 'pooler', 'prediction']
+    num_evidence_documents = 5
+    layers_to_not_freeze = ['3','4','5','6', '7', '8', '9', '10', '11', 'pooler', 'prediction']
 
     faiss_index_path = "data/realm/index.index"
     document_encodings_path = "data/realm/document_embeddings_chunks_100_unprocessed.pickle"
@@ -31,6 +35,7 @@ class REALMLikeRetriever(Retriever):
 
     def __init__(self, load_weights=False) -> None:
         super().__init__()
+        self.load_weights = load_weights
         self.device = torch.device(
             'cuda') if torch.cuda.is_available() else torch.device('cpu')
         print("Using {} device".format(self.device))
@@ -48,12 +53,14 @@ class REALMLikeRetriever(Retriever):
                 REALMEmbedder(BertConfig()), self.downloaded_model_path)
             torch.save(self.d_embedder.state_dict(), self.base_weights_path)
             print("Initialized base model from the downloaded tensorflow checkpoint")
+        
         self.q_embedder = REALMEmbedder(BertConfig())
         if load_weights:
             print(
-                f"[q_embedder] Loading saved model weights from {self.saved_weighs_path}")
-            self.q_embedder.load_state_dict(
-                torch.load(self.saved_weighs_path))
+                f"[q_embedder] Loading saved model weights from {self.saved_weights_path}")
+            saved_model = torch.load(self.saved_weights_path)
+            saved_model = {key.replace("module.", ""): value for key, value in saved_model.items()}
+            self.q_embedder.load_state_dict(saved_model)
         else:
             self.q_embedder.load_state_dict(torch.load(self.base_weights_path))
             print(
@@ -61,24 +68,20 @@ class REALMLikeRetriever(Retriever):
         self.freeze_layers()
         if torch.cuda.device_count() > 1:
             print(f"Using {torch.cuda.device_count()} GPUs")
-            if torch.cuda.device_count() == 8:
-                self.d_embedder = torch.nn.DataParallel(self.d_embedder, device_ids=[0,1,2,3,4])
-                self.q_embedder = torch.nn.DataParallel(self.q_embedder, device_ids=[0,1,2,3,4])
-            else:
-                self.d_embedder = torch.nn.DataParallel(self.d_embedder)
-                self.q_embedder = torch.nn.DataParallel(self.q_embedder)
+            self.d_embedder = torch.nn.DataParallel(self.d_embedder)
+            self.q_embedder = torch.nn.DataParallel(self.q_embedder)
         self.d_embedder.to(self.device)
         self.q_embedder.to(self.device)
-        # info about used chunks
         self.used_chunks_size = 100
 
     def get_info(self):
         info = {}
-        info['num documents retrieved'] = self.num_documents
+        info['num documents retrieved'] = self.num_evidence_documents
 
         info['bert used'] = self.bert_type
         info['layers not to freeze'] = self.layers_to_not_freeze
-        info['weights path'] = self.saved_weighs_path
+        if self.load_weights:
+            info['weights path'] = self.saved_weights_path
         info['index path'] = self.faiss_index_path
         info['chunk_size_used'] = self.used_chunks_size
 
@@ -94,7 +97,7 @@ class REALMLikeRetriever(Retriever):
         queries_embedding = self.q_embedder(**query_tokenized)
         queries_faiss_input = queries_embedding.cpu().detach().numpy()
         scores, doc_ids = self.index.search(
-            queries_faiss_input, self.num_documents)
+            queries_faiss_input, self.num_evidence_documents)
 
         retrieved_documents = []
         for id_list in doc_ids:
@@ -113,10 +116,9 @@ class REALMLikeRetriever(Retriever):
        
         with torch.no_grad():
             docs_embeddings = self.d_embedder(**docs_tokenized)
-        docs_embeddings = docs_embeddings.view(4, 4, -1)
+        docs_embeddings = docs_embeddings.view(4, self.num_evidence_documents, -1)
         recalculated_scores = torch.einsum(
             "bd,bcd->bc", queries_embedding, docs_embeddings)
-        recalculated_scores = torch.transpose(recalculated_scores, 0, 1)
 
         return recalculated_scores, retrieved_documents
 
@@ -208,9 +210,6 @@ class REALMLikeRetriever(Retriever):
     def __preprocess_content(self, content, remove_stopwords, stemming, remove_punctuation):
         if not remove_stopwords and not stemming and not remove_punctuation:
             return content.lower().strip()
-        # if remove_punctuation:
-        #     content = content.translate(punctuation).replace(
-        #         '“', '').replace('’', '')
         sentences = sent_tokenize(content.lower().strip())
         cleaned_sentences = []
 
