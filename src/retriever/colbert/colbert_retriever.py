@@ -22,8 +22,8 @@ class ColBERTRetriever(Retriever):
     base_weights_bio_path = "data/colbert/colbert-clinical-biobert-cosine-200000.dnn"
     base_weights_base_path = "data/colbert/colbert-base-bert-200000.dnn"    
     weights_file_directory = "src/results/colbert-based"
-    weights_file_bio_name = "2021-06-24_18:01:03__ColBERT_e2e_retriever.pth"
-    weights_file_base_name = "2021-06-24_18:01:03__ColBERT_e2e_retriever.pth"
+    weights_file_bio_name = "final_ColBERT_e2e_retriever_bio.pth"
+    weights_file_base_name = "final_ColBERT_e2e_retriever_base.pth"
 
     weights_file_bio_path = f"{weights_file_directory}/{weights_file_bio_name}"
     weights_file_base_path = f"{weights_file_directory}/{weights_file_base_name}"
@@ -39,11 +39,11 @@ class ColBERTRetriever(Retriever):
     chunk_150_unstemmed_path = "data/chunks_150_non_processed.pickle"
     bert_weights_path = "data/colbert-clinical-biobert-cosine-200000.dnn"
 
-    faiss_index_path = "data/colbert/index_[colbert][clinicalbiobert200000][cosine-sim][chunks100unprocessed].index"
-    document_embeddings_path = "data/colbert/document_embeddings_[colbert][clinicalbiobert200000][cosine-sim][chunks100unprocessed].pickle"
-    document_embeddings_tensor_path = "data/colbert/document_embeddings_tensor.pt"
-    embbedding2doc_id_path = "data/colbert/embbedding2doc_id_[colbert][clinicalbiobert200000][cosine-sim][chunks100unprocessed].pickle"
-    doc_embeddings_lengths_path = "data/colbert/document_embeddings_lengths_[colbert][clinicalbiobert200000][cosine-sim][chunks100unprocessed].pickle"
+    faiss_index_path = "data/colbert2/index_[colbert][clinicalbiobert200000][cosine-sim][chunks100unprocessed]2.index"
+    document_embeddings_path = "data/colbert2/document_embeddings_[colbert][clinicalbiobert200000][cosine-sim][chunks100unprocessed]2.pickle"
+    document_embeddings_tensor_path = "data/colbert2/document_embeddings_tensor2.pt"
+    embbedding2doc_id_path = "data/colbert2/embbedding2doc_id_[colbert][clinicalbiobert200000][cosine-sim][chunks100unprocessed]2.pickle"
+    doc_embeddings_lengths_path = "data/colbert2/document_embeddings_lengths_[colbert][clinicalbiobert200000][cosine-sim][chunks100unprocessed]2.pickle"
 
     def __init__(self, load_weights=False, biobert_or_base_bert="bio") -> None:
         super().__init__()
@@ -171,7 +171,6 @@ class ColBERTRetriever(Retriever):
         return info
 
     def retrieve_documents(self, queries: list):
-        all_retrieved_docs, all_scores = [], []
         input_ids, mask = self.tokenizer.tensorize_queries(queries)
         Q = self.query(input_ids, mask)
         num_queries, embeddings_per_query, dim = Q.size()
@@ -183,17 +182,18 @@ class ColBERTRetriever(Retriever):
         embeddings_ids = torch.from_numpy(embeddings_ids)
         embeddings_ids = embeddings_ids.view(
             num_queries, embeddings_per_query * embeddings_ids.size(1))
-        # embedding_ids_to_pids
+        
+        # obtaining document IDs based on word embeddings' IDs
         doc_ids = self.embbedding2doc_id[embeddings_ids].tolist()
+
+        # truncation of obtained results for optimization purposes
         doc_ids = list(map(uniq, doc_ids))
-        doc_ids_min = len(min(doc_ids, key=len))
-        doc_ids_min = doc_ids_min if doc_ids_min < 1500 else 1500
+        doc_ids_min = len(min(doc_ids, key=len)) if len(min(doc_ids, key=len)) < 1500 else 1500
         doc_ids = [x[:doc_ids_min] for x in doc_ids]
 
-        # rank
-        # .to(self.device).to(dtype=torch.float32)
         Q = Q.permute(0, 2, 1).contiguous().to(dtype=torch.float32)
-        # preprocessing
+
+        # calculating scores and choosing top highest scores with corresponding document ids
         scores = self.score_calc.calculate_scores(Q, doc_ids)
         top_k = torch.topk(scores, self.num_documents_reader, dim=1)
         top_scores = top_k.values

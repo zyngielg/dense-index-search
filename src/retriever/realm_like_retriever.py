@@ -18,14 +18,15 @@ class REALMLikeRetriever(Retriever):
     base_weights_path = "data/realm/base-realm-embedder.pt"
 
     weights_file_directory = "src/results/realm-based"
-    weights_file_name = "2021-06-21_14:49:56__REALM_retriever.pth"
+    # weights_file_name = "2021-06-21_14:49:56__REALM_retriever.pth"
+    weights_file_name = "final_REALM_retriever.pth"
     saved_weights_path = f"{weights_file_directory}/{weights_file_name}"
 
     vocab_file_path = "data/realm-tf-to-pytorch/assets/vocab.txt"
     downloaded_model_path = "data/realm-tf-to-pytorch/"
 
-    num_documents = 4
-    layers_to_not_freeze = ['6', '7', '8', '9', '10', '11', 'pooler', 'prediction']
+    num_evidence_documents = 5
+    layers_to_not_freeze = ['3','4','5','6', '7', '8', '9', '10', '11', 'pooler', 'prediction']
 
     faiss_index_path = "data/realm/index.index"
     document_encodings_path = "data/realm/document_embeddings_chunks_100_unprocessed.pickle"
@@ -67,19 +68,15 @@ class REALMLikeRetriever(Retriever):
         self.freeze_layers()
         if torch.cuda.device_count() > 1:
             print(f"Using {torch.cuda.device_count()} GPUs")
-            if torch.cuda.device_count() == 8:
-                self.d_embedder = torch.nn.DataParallel(self.d_embedder, device_ids=[0,1,2,3,4])
-                self.q_embedder = torch.nn.DataParallel(self.q_embedder, device_ids=[0,1,2,3,4])
-            else:
-                self.d_embedder = torch.nn.DataParallel(self.d_embedder)
-                self.q_embedder = torch.nn.DataParallel(self.q_embedder)
+            self.d_embedder = torch.nn.DataParallel(self.d_embedder)
+            self.q_embedder = torch.nn.DataParallel(self.q_embedder)
         self.d_embedder.to(self.device)
         self.q_embedder.to(self.device)
         self.used_chunks_size = 100
 
     def get_info(self):
         info = {}
-        info['num documents retrieved'] = self.num_documents
+        info['num documents retrieved'] = self.num_evidence_documents
 
         info['bert used'] = self.bert_type
         info['layers not to freeze'] = self.layers_to_not_freeze
@@ -100,7 +97,7 @@ class REALMLikeRetriever(Retriever):
         queries_embedding = self.q_embedder(**query_tokenized)
         queries_faiss_input = queries_embedding.cpu().detach().numpy()
         scores, doc_ids = self.index.search(
-            queries_faiss_input, self.num_documents)
+            queries_faiss_input, self.num_evidence_documents)
 
         retrieved_documents = []
         for id_list in doc_ids:
@@ -119,10 +116,9 @@ class REALMLikeRetriever(Retriever):
        
         with torch.no_grad():
             docs_embeddings = self.d_embedder(**docs_tokenized)
-        docs_embeddings = docs_embeddings.view(4, 4, -1)
+        docs_embeddings = docs_embeddings.view(4, self.num_evidence_documents, -1)
         recalculated_scores = torch.einsum(
             "bd,bcd->bc", queries_embedding, docs_embeddings)
-        recalculated_scores = torch.transpose(recalculated_scores, 0, 1)
 
         return recalculated_scores, retrieved_documents
 

@@ -272,7 +272,7 @@ class ColBERTe2e(Solution):
         qa_info['total_qa_time'] = total_time
         now = datetime.datetime.now()
         dt_string = now.strftime("%Y-%m-%d_%H:%M:%S")
-        qa_stats_file = f"src/results/ir-es-based/{dt_string}__QA__ColBERT_e2e.json"
+        qa_stats_file = f"src/results/colbert-based/{dt_string}__QA__ColBERT_e2e.json"
         with open(qa_stats_file, 'w') as results_file:
             json.dump(qa_info, results_file)
         print("********* QA complete *********")

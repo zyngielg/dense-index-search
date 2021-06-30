@@ -71,7 +71,7 @@ class REALMLikeRetrieverBaseBERTReader(Solution):
             self.retriever.q_embedder.train()
             self.reader.model.train()
             for step, batch in enumerate(train_dataloader):
-                if step % 10 == 0 and not step == 0:
+                if step % 50 == 0 and not step == 0:
                     elapsed = self.format_time(time.time() - t0)
                     print(
                         f'Batch {step} of {len(train_dataloader)}. Elapsed: {elapsed}')
@@ -85,7 +85,7 @@ class REALMLikeRetrieverBaseBERTReader(Solution):
                 input_ids = []
                 token_type_ids = []
                 attention_masks = []
-                # retriever_scores = []
+                retriever_scores = []
                 for q_idx in range(len(questions)):
                     metamap_phrases[q_idx] = remove_duplicates_preserve_order(
                         metamap_phrases[q_idx])
@@ -109,19 +109,16 @@ class REALMLikeRetrieverBaseBERTReader(Solution):
                     token_type_ids.append(question_inputs['token_type_ids'])
                     attention_masks.append(question_inputs['attention_mask'])
 
-                tensor_input_ids = torch.stack(
-                    input_ids, dim=0)  # .to(device="cuda:7")
-                tensor_token_type_ids = torch.stack(
-                    token_type_ids, dim=0)  # .to(device="cuda:7")
-                tensor_attention_masks = torch.stack(
-                    attention_masks, dim=0)  # .to(device="cuda:7")
+                tensor_input_ids = torch.stack(input_ids, dim=0)  
+                tensor_token_type_ids = torch.stack(token_type_ids, dim=0)  
+                tensor_attention_masks = torch.stack(attention_masks, dim=0) 
                 # retriever_scores = torch.stack(retriever_scores, dim=0)
                 output = self.reader.model(
                     input_ids=tensor_input_ids, attention_mask=tensor_attention_masks, token_type_ids=tensor_token_type_ids)
 
-                # retriever_score = 0 # log_softmax(retriever_scores)
+                # retriever_score =  self.log_softmax(retriever_scores)
                 reader_score = self.log_softmax(output)
-                sum_score = reader_score  # + retriever_score
+                sum_score = reader_score # + retriever_score
                 loss = criterion(sum_score, answers_indexes.to(device))
                 if self.num_gpus > 1:
                     loss = loss.mean()
@@ -175,7 +172,7 @@ class REALMLikeRetrieverBaseBERTReader(Solution):
                 input_ids = []
                 token_type_ids = []
                 attention_masks = []
-                # retriever_scores = []
+                retriever_scores = []
                 for q_idx in range(len(questions)):
                     metamap_phrases[q_idx] = remove_duplicates_preserve_order(
                         metamap_phrases[q_idx])
@@ -213,9 +210,9 @@ class REALMLikeRetrieverBaseBERTReader(Solution):
                     output = self.reader.model(
                         input_ids=tensor_input_ids.to(device), attention_mask=tensor_token_type_ids.to(device), token_type_ids=tensor_attention_masks.to(device))
 
-                # retriever_score = 0 #log_softmax(retriever_scores)
+                # retriever_score = self.log_softmax(retriever_scores)
                 reader_score = self.log_softmax(output)
-                sum_score = reader_score  # +  retriever_score
+                sum_score = reader_score #  +  retriever_score
                 loss = criterion(sum_score, answers_indexes.to(device))
                 if self.num_gpus > 1:
                     loss = loss.mean()
@@ -271,7 +268,7 @@ class REALMLikeRetrieverBaseBERTReader(Solution):
         # saving the reader weights
         reader_file_name = f"src/results/realm-based/{dt_string}__BERT_reader.pth"
         torch.save(self.reader.model.state_dict(), reader_file_name)
-        print(f"Reader weights saved in {retriever_file_name}")
+        print(f"Reader weights saved in {reader_file_name}")
 
         print("***** Training completed *****")
 
