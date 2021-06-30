@@ -1,0 +1,66 @@
+{
+    "batch_size": 32,
+    "lr": 5e-05,
+    "retriever": {
+        "num documents faiss": 2000,
+        "num documents retrieved": 5,
+        "layers not to freeze": [
+            "3",
+            "4",
+            "5",
+            "6",
+            "7",
+            "8",
+            "9",
+            "10",
+            "11",
+            "linear"
+        ],
+        "weights loaded": false,
+        "base_weights_type": "base",
+        "index path": "data/colbert/index_[colbert][basebert400000][l2-sim][chunks100unprocessed].index",
+        "chunk_size_used": 100
+    },
+    "reader": "None - ColBERT e2e",
+    "total_training_time": "3:15:05",
+    "num_train_questions": 10178,
+    "num_val_questions": 1272,
+    "training_stats": [
+        {
+            "epoch": 1,
+            "Training Time": "0:48:12",
+            "Training Loss": 1.4608463190939733,
+            "Training Accuracy.": 0.2458855799373041,
+            "Validation Time": "0:04:04",
+            "Validation Loss": 1.4346826761960982,
+            "Validation Accuracy.": 0.22916666666666666
+        },
+        {
+            "epoch": 2,
+            "Training Time": "0:45:17",
+            "Training Loss": 1.4117872726207243,
+            "Training Accuracy.": 0.2540164576802508,
+            "Validation Time": "0:03:35",
+            "Validation Loss": 1.3887537568807602,
+            "Validation Accuracy.": 0.24973958333333335
+        },
+        {
+            "epoch": 3,
+            "Training Time": "0:43:25",
+            "Training Loss": 1.3805488983291818,
+            "Training Accuracy.": 0.28066222570532917,
+            "Validation Time": "0:03:33",
+            "Validation Loss": 1.394185620546341,
+            "Validation Accuracy.": 0.26666666666666666
+        },
+        {
+            "epoch": 4,
+            "Training Time": "0:43:19",
+            "Training Loss": 1.3400883439192577,
+            "Training Accuracy.": 0.34277037617554856,
+            "Validation Time": "0:03:38",
+            "Validation Loss": 1.3942171216011048,
+            "Validation Accuracy.": 0.28203125
+        }
+    ]
+}

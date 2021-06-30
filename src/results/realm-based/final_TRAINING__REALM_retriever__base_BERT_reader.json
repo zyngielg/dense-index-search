@@ -1,0 +1,75 @@
+{
+    "batch_size": 16,
+    "lr": 5e-05,
+    "retriever": {
+        "num documents retrieved": 5,
+        "bert used": "bert-base-uncased",
+        "layers not to freeze": [
+            "3",
+            "4",
+            "5",
+            "6",
+            "7",
+            "8",
+            "9",
+            "10",
+            "11",
+            "pooler",
+            "prediction"
+        ],
+        "index path": "data/realm3/index.index",
+        "chunk_size_used": 100
+    },
+    "reader": {
+        "bert type": "bert-base-uncased",
+        "weights loaded": false,
+        "layers not to freeze": [
+            "7",
+            "8",
+            "9",
+            "10",
+            "11",
+            "linear",
+            "pooler"
+        ]
+    },
+    "total_training_time": "3:16:39",
+    "training_stats": [
+        {
+            "epoch": 1,
+            "Training Loss": 1.391489107904479,
+            "Training Accuracy": 0.25058869701726844,
+            "Valid. Loss": 1.3859963029623033,
+            "Valid. Accur.": 0.2625,
+            "Training Time": "0:44:01",
+            "Validation Time": "0:05:10"
+        },
+        {
+            "epoch": 2,
+            "Training Loss": 1.3894521755925153,
+            "Training Accuracy": 0.25686813186813184,
+            "Valid. Loss": 1.3860915735363961,
+            "Valid. Accur.": 0.26015625,
+            "Training Time": "0:44:00",
+            "Validation Time": "0:05:11"
+        },
+        {
+            "epoch": 3,
+            "Training Loss": 1.386445019645631,
+            "Training Accuracy": 0.2624607535321821,
+            "Valid. Loss": 1.3859164237976074,
+            "Valid. Accur.": 0.2640625,
+            "Training Time": "0:43:54",
+            "Validation Time": "0:05:10"
+        },
+        {
+            "epoch": 4,
+            "Training Loss": 1.377763420858039,
+            "Training Accuracy": 0.2824764521193093,
+            "Valid. Loss": 1.3852997288107871,
+            "Valid. Accur.": 0.2609375,
+            "Training Time": "0:43:59",
+            "Validation Time": "0:05:14"
+        }
+    ]
+}
